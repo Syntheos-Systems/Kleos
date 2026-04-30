@@ -629,7 +629,7 @@ pub fn generate_instincts() -> InstinctsCorpus {
         ("server-specs", "app-server-1: 8 vCPU, 32GB RAM, 500GB NVMe SSD, Ubuntu 22.04. Role: application services backend.", 700, 8),
         ("server-specs", "edge-server-1: 4 vCPU, 16GB RAM, 200GB SSD, Rocky Linux 9. Role: CDN edge node and static assets.", 702, 7),
         ("server-specs", "dev-workstation: Xeon W-2125 4.0GHz 8-core, 30GB RAM, 2TB HDD. Role: primary development and build machine.", 704, 9),
-        ("endpoint", "Engram memory API: POST /store to persist memories, POST /search to query, GET /recall for recent. Auth via Bearer token.", 710, 8),
+        ("endpoint", "Kleos memory API: POST /store to persist memories, POST /search to query, GET /recall for recent. Auth via Bearer token.", 710, 8),
         ("endpoint", "Eidolon brain API: JSON over stdio. Commands: init, query, absorb, decay_tick, dream_cycle, get_stats, shutdown.", 712, 9),
         ("filepath", "Brain database location: /brain.db - SQLite, contains memories, edges, pca_state tables.", 714, 8),
         ("filepath", "Instincts binary: /instincts.bin - gzip-compressed JSON corpus, applied on first init when brain.db is empty.", 716, 7),
@@ -663,8 +663,8 @@ pub fn generate_instincts() -> InstinctsCorpus {
 
     // -- Category 4: Task completion records (20) --
     let tasks: &[(&str, i64, i32)] = &[
-        ("Deploy Eidolon brain substrate Phase 1 to the development server. Result: binary at /target/release/eidolon. brain.db initialized with 847 memories from Engram export.", 800, 9),
-        ("Migrate Engram database from SQLite to PostgreSQL. Result: 12,847 memories migrated, 0 data loss, query time improved from 45ms to 8ms at p99.", 810, 8),
+        ("Deploy Eidolon brain substrate Phase 1 to the development server. Result: binary at /target/release/eidolon. brain.db initialized with 847 memories from Kleos export.", 800, 9),
+        ("Migrate Kleos database from SQLite to PostgreSQL. Result: 12,847 memories migrated, 0 data loss, query time improved from 45ms to 8ms at p99.", 810, 8),
         ("Fix memory leak in Eidolon decay module. Root cause: Vec not cleared after prune. Fix: add memory.retain() after dead_set removal. Leak eliminated.", 820, 9),
         ("Set up Traefik TLS termination for all subdomains. Let Encrypt wildcard cert via DNS challenge. All subdomains now HTTPS.", 830, 8),
         ("Configure Prometheus scrape targets for all nodes. Added: node_exporter, postgres_exporter, redis_exporter, nginx_exporter.", 840, 7),
@@ -675,7 +675,7 @@ pub fn generate_instincts() -> InstinctsCorpus {
         ("Debug and fix Nginx upstream 502 errors. Root cause: backend pool exhausted due to connection leak in Python worker.", 890, 9),
         ("Enable TCP BBR on all Linux servers via sysctl. net.ipv4.tcp_congestion_control=bbr. p99 latency -23%, throughput +18%.", 900, 7),
         ("Consolidate application and edge server nginx configs into shared template. Reduced config duplication from 4 files to 1 template.", 910, 6),
-        ("Add memory decay monitoring to Engram dashboard. Alert when avg_decay_factor < 0.3. Grafana panel showing health_distribution over time.", 920, 7),
+        ("Add memory decay monitoring to Kleos dashboard. Alert when avg_decay_factor < 0.3. Grafana panel showing health_distribution over time.", 920, 7),
         ("Write Eidolon dreaming module. Implements: replay_recent, merge_redundant, prune_dead, discover_connections, resolve_lingering.", 930, 9),
         ("Write Eidolon instincts module. Generates 200 synthetic ghost patterns across 5 categories. Ghost replacement on cosine_sim > 0.85.", 940, 9),
         ("Implement Hopfield substrate in Rust with ndarray. PCA projection 1024->512 dims. Retrieval via softmax activation.", 950, 9),
@@ -756,8 +756,8 @@ pub fn generate_instincts() -> InstinctsCorpus {
             1300, 1312, 5, 9
         ),
         (
-            "Engram stores memories in a custom binary format for performance.",
-            "CORRECTION: Engram stores memories in SQLite or PostgreSQL. The instincts.bin file is separate and not the main Engram storage.",
+            "Kleos stores memories in a custom binary format for performance.",
+            "CORRECTION: Kleos stores memories in SQLite or PostgreSQL. The instincts.bin file is separate and not the main Kleos storage.",
             1320, 1332, 5, 7
         ),
         (

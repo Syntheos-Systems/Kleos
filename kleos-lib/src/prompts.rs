@@ -120,11 +120,11 @@ pub async fn generate_prompt(
 
     let prompt = match format {
         "anthropic" => format!(
-            "<context>\n<engram-memories count=\"{}\" tokens=\"~{}\">\n{}\n</engram-memories>\n</context>\n\nThe above are persistent memories from previous sessions. Use them to maintain continuity. If a memory contradicts the current conversation, prefer the conversation.",
+            "<context>\n<kleos-memories count=\"{}\" tokens=\"~{}\">\n{}\n</kleos-memories>\n</context>\n\nThe above are persistent memories from previous sessions. Use them to maintain continuity. If a memory contradicts the current conversation, prefer the conversation.",
             count, tokens_used, memory_block
         ),
         "openai" => format!(
-            "# Persistent Memory (Engram)\nThe following are {} memories from previous sessions (~{} tokens):\n\n{}\n\nUse these memories for context. If they conflict with the current conversation, prefer the conversation.",
+            "# Persistent Memory (Kleos)\nThe following are {} memories from previous sessions (~{} tokens):\n\n{}\n\nUse these memories for context. If they conflict with the current conversation, prefer the conversation.",
             count, tokens_used, memory_block
         ),
         "llamaindex" => format!("[MEMORY CONTEXT]\n{}\n[/MEMORY CONTEXT]", memory_block),
@@ -207,14 +207,14 @@ pub async fn generate_header(
 
     let prior_list: Vec<String> = prior_models.into_iter().collect();
     let mut lines = vec![
-        "# Engram Task Header".to_string(),
+        "# Kleos Task Header".to_string(),
         format!("actor_model: {}", actor_model_owned),
         format!("actor_role: {}", actor_role),
         format!("prior_models: [{}]", prior_list.join(", ")),
         String::new(),
         "## Attribution Rule".to_string(),
         format!(
-            "You are {}. Memories in Engram tagged with a different model were NOT created by you.",
+            "You are {}. Memories in Kleos tagged with a different model were NOT created by you.",
             actor_model_owned
         ),
     ];
@@ -414,13 +414,13 @@ All services at **{engram_url}**. Use these throughout your session.
 
 | Service | Key Endpoints | When to Use |
 |---------|--------------|-------------|
-| Engram | POST /search, POST /store, POST /context | Search before guessing. Store after completing work. |
+| Kleos | POST /search, POST /store, POST /context | Search before guessing. Store after completing work. |
 | Chiasm | POST /tasks, PATCH /tasks/:id | Create task on start. Update during. Complete on end. |
 | Broca | POST /broca/actions, POST /broca/ask | Log significant actions. Ask infrastructure questions. |
 | Axon | POST /axon/publish | Publish events on major milestones. |
 | Soma | POST /soma/agents, POST /soma/agents/:id/heartbeat | Register on start. Heartbeat during. |
 
-**MANDATORY:** Search Engram BEFORE asking the user ANY question about servers, credentials, architecture, or past decisions.
+**MANDATORY:** Search Kleos BEFORE asking the user ANY question about servers, credentials, architecture, or past decisions.
 
 === END LIVING CONTEXT ===
 "#,
