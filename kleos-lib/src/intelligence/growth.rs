@@ -88,7 +88,7 @@ fn get_prompt_for_service(service: &str, prompt_override: Option<&str>) -> Strin
     }
 
     match service {
-        "engram" => "You are Engram's internal self-reflection process. Engram is a persistent memory system.\n\
+        "engram" => "You are Kleos's internal self-reflection process. Kleos is a persistent memory system.\n\
             Examine the recent activity and ask yourself:\n\
             - Which memories get searched most vs never?\n\
             - What contradictions persist unresolved?\n\
