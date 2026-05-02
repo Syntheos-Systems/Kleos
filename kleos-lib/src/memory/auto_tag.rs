@@ -2,27 +2,10 @@ pub fn infer_tags(content: &str) -> Vec<String> {
     let lower = content.to_lowercase();
     let mut tags = Vec::new();
 
-    let host_map: &[(&str, &str)] = &[
-        ("hetzner", "hetzner"),
-        ("ovh", "ovh"),
-        ("rocky", "rocky"),
-        ("garuda", "garuda"),
-        ("cachyos", "cachyos"),
-        ("win-desktop", "win-desktop"),
-    ];
-    for &(needle, tag) in host_map {
-        if lower.contains(needle) {
-            tags.push(tag.to_string());
-        }
-    }
-
     let service_map: &[(&str, &str)] = &[
         ("kleos", "kleos"),
         ("engram", "engram"),
-        ("chat-proxy", "chat-proxy"),
-        ("library", "library"),
         ("credd", "credd"),
-        ("agent-config", "agent-config"),
         ("kleos-ingest", "kleos-ingest"),
         ("eidolon", "eidolon"),
     ];
