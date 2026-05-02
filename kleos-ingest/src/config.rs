@@ -22,7 +22,7 @@ impl Config {
             });
 
         let kleos_url = std::env::var("KLEOS_URL")
-            .unwrap_or_else(|_| "http://172.30.0.201:4200".to_string());
+            .unwrap_or_else(|_| "http://127.0.0.1:4200".to_string());
 
         let api_key = std::env::var("KLEOS_API_KEY").ok().filter(|k| !k.is_empty());
 

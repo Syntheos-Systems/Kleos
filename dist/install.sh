@@ -250,7 +250,7 @@ RULES
             if [ ! -f "$supervisor_config_dir/supervisor.env" ]; then
                 cat > "$supervisor_config_dir/supervisor.env" <<'ENV'
 # Eidolon supervisor environment
-# KLEOS_SERVER_URL=http://172.30.0.201:4200
+# KLEOS_SERVER_URL=http://127.0.0.1:4200
 # KLEOS_API_KEY=  (prefer cred/credd over plaintext)
 # CLAUDE_SESSIONS_DIR=~/.claude/projects
 ENV
