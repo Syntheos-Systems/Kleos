@@ -1,13 +1,13 @@
 # Query plans for hot paths
 
 This file captures `EXPLAIN QUERY PLAN` output for the five SQL queries
-that dominate engram-rust's read traffic, plus the index each plan is
+that dominate kleos's read traffic, plus the index each plan is
 expected to use. If you change the schema or a hot query, rerun
 `EXPLAIN QUERY PLAN` against a representative database and update the
 expected plan here.
 
 Generated against migration 20 (see
-`engram-lib/src/db/migrations.rs`) with the memory-links covering
+`kleos-lib/src/db/migrations.rs`) with the memory-links covering
 indices from plan 3.1.
 
 ## How to reproduce
