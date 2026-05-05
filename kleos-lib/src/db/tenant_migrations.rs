@@ -272,6 +272,11 @@ pub static TENANT_MIGRATIONS: &[TenantMigration] = &[
         description: "gate_requests_session_id",
         up: apply_schema_v47_gate_requests_session_id,
     },
+    TenantMigration {
+        version: 48,
+        description: "supervisor_injections_fix_schema",
+        up: apply_schema_v48_supervisor_injections_fix,
+    },
 ];
 
 fn apply_schema_v1(conn: &Connection) -> Result<()> {
@@ -555,6 +560,30 @@ fn apply_schema_v47_gate_requests_session_id(conn: &Connection) -> Result<()> {
             WHERE output IS NULL;",
     )
     .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v47 index failed: {e}")))
+}
+
+fn apply_schema_v48_supervisor_injections_fix(conn: &Connection) -> Result<()> {
+    if !table_has_column(conn, "supervisor_injections", "rule_id")? {
+        conn.execute_batch(
+            "ALTER TABLE supervisor_injections ADD COLUMN rule_id TEXT NOT NULL DEFAULT '';"
+        )
+        .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v48 (rule_id) failed: {e}")))?;
+    }
+    if !table_has_column(conn, "supervisor_injections", "claimed_at")? {
+        conn.execute_batch(
+            "ALTER TABLE supervisor_injections ADD COLUMN claimed_at TEXT;"
+        )
+        .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v48 (claimed_at) failed: {e}")))?;
+    }
+    // Rebuild the partial index to use claimed_at instead of consumed
+    conn.execute_batch(
+        "DROP INDEX IF EXISTS idx_supervisor_injections_pending;
+         CREATE INDEX IF NOT EXISTS idx_supervisor_injections_pending
+            ON supervisor_injections(user_id, session_id)
+            WHERE claimed_at IS NULL;",
+    )
+    .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v48 (index) failed: {e}")))?;
+    Ok(())
 }
 
 fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
