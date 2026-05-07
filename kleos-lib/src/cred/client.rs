@@ -475,7 +475,7 @@ pub fn extract_env_export_block(secret: &Value) -> crate::Result<String> {
 /// Trust evaluation seam. Currently returns 0 (deny-by-default).
 /// Phase 2 will track session age, tool call count, and gate block count
 /// to produce a decaying score.
-#[allow(unused_variables)]
+#[allow(dead_code, unused_variables, reason = "Phase 2 seam -- will track session trust decay")]
 pub fn evaluate_trust(session_id: &str) -> u8 {
     0
 }

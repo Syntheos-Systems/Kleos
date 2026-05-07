@@ -199,11 +199,13 @@ async fn get_executions(
     Ok(Json(json!({ "agent_id": id, "executions": executions })))
 }
 
-// M-R3-001: previously this returned 200 OK with valid:false + an error
-// string for execution/message/tool_manifest, which made callers branch on
-// "valid" and treat the request as a legitimate negative result. Now we
-// return 501 NOT_IMPLEMENTED so callers can distinguish "the server cannot
-// answer" from "the server says invalid".
+// Verify an agent credential.
+//
+// Supported kinds:
+//   - passport: fully implemented (Ed25519 signature check)
+//   - execution: 501 -- planned for Phase 2 (action-log replay verification)
+//   - message: 501 -- planned for Phase 2 (arbitrary-JSON signature check)
+//   - tool_manifest: 501 -- planned for Phase 2 (declared-tool registry + sig)
 async fn verify(
     Json(body): Json<VerifyBody>,
 ) -> Result<Json<Value>, (axum::http::StatusCode, Json<Value>)> {
