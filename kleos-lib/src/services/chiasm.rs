@@ -442,10 +442,10 @@ mod tests {
 
     /// Phase 5.4 dropped user_id from chiasm tables: tenant isolation is
     /// now enforced at the database level (one shard per tenant), so a
-    /// shared in-memory DB no longer separates user 1 and user 2. The
-    /// invariant the tenant harness must uphold (different shards see
-    /// different rows) is covered in kleos-server/tests once Phase 4.2
-    /// wires the tenant-aware test harness.
+    /// shared in-memory DB no longer separates user 1 and user 2.
+    ///
+    /// The shard-level invariant is now covered by:
+    ///   kleos-lib/tests/tenant_isolation.rs::chiasm_tasks_isolated_across_tenants
     #[tokio::test]
     #[ignore]
     async fn list_is_scoped_by_user() {

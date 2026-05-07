@@ -557,9 +557,10 @@ mod tests {
 
     /// Phase 5.8 dropped user_id from soma_agents: tenant isolation is now
     /// at the database level. A shared in-memory DB no longer separates user
-    /// 1 from user 2 on soma_agents. The tenant-aware form of this invariant
-    /// lands in kleos-server/tests once Phase 4.2 wires the tenant-aware
-    /// test harness.
+    /// 1 from user 2 on soma_agents.
+    ///
+    /// The shard-level invariant is now covered by:
+    ///   kleos-lib/tests/tenant_isolation.rs::soma_agents_isolated_across_tenants
     #[tokio::test]
     #[ignore]
     async fn list_is_scoped_by_user() {
