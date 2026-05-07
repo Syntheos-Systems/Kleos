@@ -203,6 +203,7 @@ async fn main() {
             TenantConfig::default(),
             config.vector_dimensions,
             config.use_chunk_vector_search,
+            encryption_key,
         )
         .expect("failed to initialize tenant registry");
         tracing::info!("tenant sharding enabled (default)");

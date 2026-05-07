@@ -43,6 +43,7 @@ impl TenantRegistry {
         config: TenantConfig,
         vector_dimensions: usize,
         use_chunk_vector_search: bool,
+        encryption_key: Option<[u8; 32]>,
     ) -> Result<Self> {
         let data_root = data_dir.into();
 
@@ -56,6 +57,7 @@ impl TenantRegistry {
             config.clone(),
             vector_dimensions,
             use_chunk_vector_search,
+            encryption_key,
         ));
 
         info!("tenant registry initialized at {}", data_root.display());
@@ -78,6 +80,7 @@ impl TenantRegistry {
             config.clone(),
             vector_dimensions,
             false,
+            None,
         ));
 
         Ok(Self {
