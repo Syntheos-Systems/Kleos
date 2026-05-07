@@ -172,12 +172,14 @@ fn apply_pragmas(
     // Any other statement on an encrypted DB without the key will fail with
     // "file is not a database".
     if let Some(ref key) = encryption_key {
-        // SECURITY (SEC-MED-10): zeroize key_hex after use so the hex-encoded
-        // encryption key does not linger on the heap.
-        let mut key_hex = crate::encryption::format_pragma_key(key);
-        let pragma_result = conn.pragma_update(None, "key", &key_hex);
+        // SQLCipher raw key mode: PRAGMA key = x'<hex>' (unquoted hex literal).
+        // rusqlite's pragma_update() wraps the value in single quotes, turning
+        // the x'...' hex literal into a passphrase string. Use execute_batch()
+        // to emit the raw SQL without quoting.
+        let mut key_sql = format!("PRAGMA key = {};", crate::encryption::format_pragma_key(key));
+        let pragma_result = conn.execute_batch(&key_sql);
         use zeroize::Zeroize;
-        key_hex.zeroize();
+        key_sql.zeroize();
         pragma_result?;
 
         // Verify the key is correct by reading schema_version. If the key
