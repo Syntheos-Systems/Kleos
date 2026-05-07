@@ -17,6 +17,11 @@ pub const DEFAULT_TABLE_NAME: &str = "memory_vectors";
 pub const CHUNK_TABLE_NAME: &str = "memory_chunk_vectors";
 const VECTOR_COLUMN: &str = "vector";
 
+/// Schema version for the LanceDB vector tables. Bump when changing the
+/// column layout (not when changing the embedding model or dimensions --
+/// those are validated dynamically at open time).
+pub const LANCE_SCHEMA_VERSION: u32 = 2;
+
 /// Minimum number of rows before an IVF_HNSW_PQ index is built. Below this
 /// threshold LanceDB's IVF clustering does not converge cleanly and a linear
 /// scan over the fixed-size-list is faster anyway, so we skip index creation.
@@ -138,6 +143,20 @@ impl LanceIndex {
                 .schema()
                 .await
                 .map_err(|e| lance_err("read LanceDB table schema", e))?;
+            // Validate vector dimensions match runtime config.
+            if let Ok(field) = persisted_schema.field_with_name(VECTOR_COLUMN) {
+                if let DataType::FixedSizeList(_, on_disk_dims) = field.data_type() {
+                    let on_disk = *on_disk_dims as usize;
+                    if on_disk != self.dimensions {
+                        return Err(EngError::InvalidInput(format!(
+                            "LanceDB table '{}' has {}-dim vectors but runtime expects {}-dim. \
+                             Re-embed with the correct model or delete the lance directory to rebuild.",
+                            self.table_name, on_disk, self.dimensions
+                        )));
+                    }
+                }
+            }
+
             let has_stale_user_id = persisted_schema.field_with_name("user_id").is_ok();
             if has_stale_user_id {
                 warn!(
