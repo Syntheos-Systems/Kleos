@@ -123,6 +123,12 @@ These are transitive dependencies that cannot be upgraded without upstream relea
 | RUSTSEC-2026-0097 | rand 0.8.5 | tantivy (rand_distr), libsql (tower 0.4). Advisory targets `rand::rng()` which is 0.9+ only; not callable in 0.8 |
 | RUSTSEC-2024-0436 | paste 1.0.15 | tokenizers, lance-bitpacking. Unmaintained but no known vulnerability |
 
+**Duplicate crate versions (accepted):**
+
+| Crate | Versions | Reason |
+|-------|----------|--------|
+| base64 | 0.13.1, 0.22.x | `spm_precompiled -> tokenizers` pins 0.13; modern arrow uses 0.22. Small crate, low CVE history. Resolves when tokenizers drops spm_precompiled or upgrades internally. |
+
 None of these advisories are exploitable in engram's usage patterns.
 
 ### Build issue: engram-migrate
