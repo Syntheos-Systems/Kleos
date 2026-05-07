@@ -44,11 +44,12 @@ pub fn resolve_key(config: &Config) -> Result<Option<[u8; KEY_SIZE]>> {
 
 /// Format a 32-byte key as the SQLCipher `PRAGMA key` value.
 ///
-/// SQLCipher expects the key as `x'<hex>'` (raw key mode) to avoid the
-/// internal PBKDF2 derivation pass. We already have a strong 32-byte key
-/// from Argon2id or a keyfile, so raw key mode is correct.
+/// SQLCipher raw key mode requires the value in double quotes:
+/// `PRAGMA key = "x'<hex>'"`. The double quotes tell SQLCipher to
+/// interpret the hex literal as a raw 256-bit key, bypassing the
+/// PBKDF2 derivation pass.
 pub fn format_pragma_key(key: &[u8; KEY_SIZE]) -> String {
-    format!("x'{}'", hex::encode(key))
+    format!("\"x'{}'\"", hex::encode(key))
 }
 
 // ---------------------------------------------------------------------------
@@ -321,11 +322,12 @@ mod tests {
     }
 
     #[test]
-    fn format_pragma_key_produces_sqlcipher_hex() {
+    fn format_pragma_key_produces_sqlcipher_raw_key() {
         let key = [0xaa; 32];
         let pragma = format_pragma_key(&key);
-        assert!(pragma.starts_with("x'"));
-        assert!(pragma.ends_with('\''));
-        assert_eq!(pragma.len(), 2 + 64 + 1); // x' + 64 hex + '
+        assert!(pragma.starts_with("\"x'"));
+        assert!(pragma.ends_with("'\""));
+        // "x'" + 64 hex + "'"  = 3 + 64 + 2 = 69
+        assert_eq!(pragma.len(), 69);
     }
 }
