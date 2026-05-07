@@ -30,7 +30,9 @@ impl Database {
                 edge_cases TEXT,
                 files_to_touch TEXT,
                 dependencies TEXT,
-                status TEXT DEFAULT 'active'
+                status TEXT DEFAULT 'active',
+                completed_at INTEGER,
+                status_note TEXT
             );
 
             CREATE TABLE IF NOT EXISTS hypotheses (
@@ -41,7 +43,8 @@ impl Database {
                 confidence REAL NOT NULL,
                 outcome TEXT,
                 outcome_notes TEXT,
-                verified_at INTEGER
+                verified_at INTEGER,
+                spec_id TEXT REFERENCES specs(id)
             );
 
             CREATE TABLE IF NOT EXISTS checkpoints (
@@ -58,7 +61,8 @@ impl Database {
                 created_at INTEGER NOT NULL,
                 discovery TEXT NOT NULL,
                 context TEXT,
-                tags TEXT
+                tags TEXT,
+                spec_id TEXT REFERENCES specs(id)
             );
 
             CREATE TABLE IF NOT EXISTS approaches (
@@ -72,8 +76,54 @@ impl Database {
                 score REAL,
                 chosen INTEGER DEFAULT 0
             );
+
+            CREATE TABLE IF NOT EXISTS verifications (
+                id TEXT PRIMARY KEY,
+                spec_id TEXT REFERENCES specs(id),
+                created_at INTEGER NOT NULL,
+                command TEXT NOT NULL,
+                exit_code INTEGER NOT NULL,
+                success INTEGER NOT NULL,
+                duration_ms INTEGER,
+                criteria_index INTEGER,
+                stdout TEXT,
+                stderr TEXT
+            );
             "#,
-        )
+        )?;
+
+        // Migrations for existing databases
+        self.migrate()
+    }
+
+    fn migrate(&self) -> SqliteResult<()> {
+        let has_column = |table: &str, col: &str| -> bool {
+            self.conn
+                .prepare(&format!("SELECT {} FROM {} LIMIT 0", col, table))
+                .is_ok()
+        };
+
+        if !has_column("hypotheses", "spec_id") {
+            self.conn.execute_batch(
+                "ALTER TABLE hypotheses ADD COLUMN spec_id TEXT REFERENCES specs(id);"
+            )?;
+        }
+        if !has_column("session_learns", "spec_id") {
+            self.conn.execute_batch(
+                "ALTER TABLE session_learns ADD COLUMN spec_id TEXT REFERENCES specs(id);"
+            )?;
+        }
+        if !has_column("specs", "completed_at") {
+            self.conn.execute_batch(
+                "ALTER TABLE specs ADD COLUMN completed_at INTEGER;"
+            )?;
+        }
+        if !has_column("specs", "status_note") {
+            self.conn.execute_batch(
+                "ALTER TABLE specs ADD COLUMN status_note TEXT;"
+            )?;
+        }
+        Ok(())
     }
 
     pub fn conn(&self) -> &Connection {

@@ -1,5 +1,6 @@
 use crate::db::Database;
 use crate::json_io::Output;
+use crate::kleos_client::KleosClient;
 use crate::tools::{set_session_active, ToolError, ToolResult};
 use chrono::Utc;
 use serde::Deserialize;
@@ -87,5 +88,239 @@ pub fn spec_task(db: &Database, input: SpecTaskInput) -> ToolResult {
 
     set_session_active(&id, &task_type);
 
-    Ok(Output::ok_with_id(id, "Spec created"))
+    // Opportunistic: search for relevant skills
+    let related_skills = KleosClient::new()
+        .and_then(|c| c.search_skills(&task_description, Some(5)))
+        .ok()
+        .and_then(|v| v.get("skills").cloned());
+
+    let mut output = Output::ok_with_id(id, "Spec created");
+    if let Some(skills) = related_skills {
+        output.data = Some(serde_json::json!({ "related_skills": skills }));
+    }
+    Ok(output)
+}
+
+#[derive(Deserialize)]
+pub struct UpdateSpecInput {
+    pub spec_id: Option<String>,
+    pub status: Option<String>,
+    pub note: Option<String>,
+}
+
+const VALID_STATUSES: &[&str] = &["active", "completed", "failed", "blocked"];
+
+pub fn update_spec(db: &Database, input: UpdateSpecInput) -> ToolResult {
+    let spec_id = input
+        .spec_id
+        .ok_or_else(|| ToolError::MissingField("spec_id".into()))?;
+    let status = input
+        .status
+        .ok_or_else(|| ToolError::MissingField("status".into()))?;
+
+    if !VALID_STATUSES.contains(&status.as_str()) {
+        return Err(ToolError::InvalidValue(format!(
+            "status must be one of: {}",
+            VALID_STATUSES.join(", ")
+        )));
+    }
+
+    let now = Utc::now().timestamp();
+    let completed_at = if status == "completed" || status == "failed" {
+        Some(now)
+    } else {
+        None
+    };
+
+    let rows = db
+        .conn()
+        .execute(
+            "UPDATE specs SET status = ?1, status_note = ?2, completed_at = ?3 WHERE id = ?4",
+            rusqlite::params![status, input.note, completed_at, spec_id],
+        )
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+    if rows == 0 {
+        return Err(ToolError::InvalidValue(format!(
+            "Spec not found: {}",
+            spec_id
+        )));
+    }
+
+    Ok(Output::ok(format!("Spec {} marked as {}", spec_id, status)))
+}
+
+#[derive(Deserialize)]
+pub struct ListSpecsInput {
+    pub status: Option<String>,
+    pub limit: Option<usize>,
+}
+
+pub fn list_specs(db: &Database, input: ListSpecsInput) -> ToolResult {
+    let limit = input.limit.unwrap_or(20);
+
+    let (query, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(ref status) = input.status {
+        (
+            "SELECT id, task_description, task_type, status, created_at, completed_at, status_note FROM specs WHERE status = ?1 ORDER BY created_at DESC LIMIT ?2",
+            vec![Box::new(status.clone()), Box::new(limit as i64)],
+        )
+    } else {
+        (
+            "SELECT id, task_description, task_type, status, created_at, completed_at, status_note FROM specs ORDER BY created_at DESC LIMIT ?1",
+            vec![Box::new(limit as i64)],
+        )
+    };
+
+    let mut stmt = db
+        .conn()
+        .prepare(query)
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(params.iter()), |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "task_description": row.get::<_, String>(1)?,
+                "task_type": row.get::<_, String>(2)?,
+                "status": row.get::<_, String>(3)?,
+                "created_at": row.get::<_, i64>(4)?,
+                "completed_at": row.get::<_, Option<i64>>(5)?,
+                "status_note": row.get::<_, Option<String>>(6)?,
+            }))
+        })
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+    let results: Vec<_> = rows.filter_map(|r| r.ok()).collect();
+
+    let mut output = Output::ok(format!("Found {} specs", results.len()));
+    output.data = Some(serde_json::json!({ "specs": results }));
+    Ok(output)
+}
+
+#[derive(Deserialize)]
+pub struct GetSpecInput {
+    pub spec_id: Option<String>,
+}
+
+pub fn get_spec(db: &Database, input: GetSpecInput) -> ToolResult {
+    let spec_id = input
+        .spec_id
+        .ok_or_else(|| ToolError::MissingField("spec_id".into()))?;
+
+    let spec: serde_json::Value = db
+        .conn()
+        .query_row(
+            "SELECT id, task_description, task_type, acceptance_criteria, interface_contract, edge_cases, files_to_touch, dependencies, status, created_at, completed_at, status_note FROM specs WHERE id = ?1",
+            rusqlite::params![spec_id],
+            |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, String>(0)?,
+                    "task_description": row.get::<_, String>(1)?,
+                    "task_type": row.get::<_, String>(2)?,
+                    "acceptance_criteria": row.get::<_, String>(3)?,
+                    "interface_contract": row.get::<_, Option<String>>(4)?,
+                    "edge_cases": row.get::<_, Option<String>>(5)?,
+                    "files_to_touch": row.get::<_, Option<String>>(6)?,
+                    "dependencies": row.get::<_, Option<String>>(7)?,
+                    "status": row.get::<_, String>(8)?,
+                    "created_at": row.get::<_, i64>(9)?,
+                    "completed_at": row.get::<_, Option<i64>>(10)?,
+                    "status_note": row.get::<_, Option<String>>(11)?,
+                }))
+            },
+        )
+        .map_err(|e| ToolError::DatabaseError(format!("Spec not found: {}", e)))?;
+
+    // Get related hypotheses
+    let mut hyp_stmt = db
+        .conn()
+        .prepare(
+            "SELECT id, hypothesis, outcome, confidence FROM hypotheses WHERE spec_id = ?1 ORDER BY created_at DESC",
+        )
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+    let hypotheses: Vec<serde_json::Value> = hyp_stmt
+        .query_map(rusqlite::params![spec_id], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "hypothesis": row.get::<_, String>(1)?,
+                "outcome": row.get::<_, Option<String>>(2)?,
+                "confidence": row.get::<_, f64>(3)?,
+            }))
+        })
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Get related approaches
+    let mut app_stmt = db
+        .conn()
+        .prepare(
+            "SELECT id, name, score, chosen FROM approaches WHERE spec_id = ?1 ORDER BY created_at DESC",
+        )
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+    let approaches: Vec<serde_json::Value> = app_stmt
+        .query_map(rusqlite::params![spec_id], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "name": row.get::<_, String>(1)?,
+                "score": row.get::<_, Option<f64>>(2)?,
+                "chosen": row.get::<_, i64>(3)?,
+            }))
+        })
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Get related learnings
+    let mut learn_stmt = db
+        .conn()
+        .prepare(
+            "SELECT id, discovery FROM session_learns WHERE spec_id = ?1 ORDER BY created_at DESC",
+        )
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+    let learnings: Vec<serde_json::Value> = learn_stmt
+        .query_map(rusqlite::params![spec_id], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "discovery": row.get::<_, String>(1)?,
+            }))
+        })
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    // Get related verifications
+    let mut ver_stmt = db
+        .conn()
+        .prepare(
+            "SELECT id, command, success, duration_ms, criteria_index FROM verifications WHERE spec_id = ?1 ORDER BY created_at DESC",
+        )
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
+
+    let verifications: Vec<serde_json::Value> = ver_stmt
+        .query_map(rusqlite::params![spec_id], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, String>(0)?,
+                "command": row.get::<_, String>(1)?,
+                "success": row.get::<_, bool>(2)?,
+                "duration_ms": row.get::<_, Option<i64>>(3)?,
+                "criteria_index": row.get::<_, Option<i64>>(4)?,
+            }))
+        })
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut output = Output::ok(format!("Spec {}", spec_id));
+    output.data = Some(serde_json::json!({
+        "spec": spec,
+        "hypotheses": hypotheses,
+        "approaches": approaches,
+        "learnings": learnings,
+        "verifications": verifications,
+    }));
+    Ok(output)
 }

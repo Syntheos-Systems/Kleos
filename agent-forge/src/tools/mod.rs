@@ -2,7 +2,9 @@ pub mod approaches;
 pub mod ast;
 pub mod hypothesis;
 pub mod session;
+pub mod skills;
 pub mod spec;
+pub mod stats;
 pub mod think;
 pub mod verify;
 

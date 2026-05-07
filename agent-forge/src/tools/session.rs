@@ -82,9 +82,14 @@ pub struct SessionLearnInput {
     pub discovery: Option<String>,
     pub context: Option<String>,
     pub tags: Option<Vec<String>>,
+    pub capture_as_skill: Option<bool>,
+    pub spec_id: Option<String>,
 }
 
 pub fn session_learn(db: &Database, input: SessionLearnInput) -> ToolResult {
+    let capture_as_skill = input.capture_as_skill;
+    let spec_id = input.spec_id;
+
     let discovery = input
         .discovery
         .ok_or_else(|| ToolError::MissingField("discovery".into()))?;
@@ -95,8 +100,8 @@ pub fn session_learn(db: &Database, input: SessionLearnInput) -> ToolResult {
     db.conn()
         .execute(
             r#"
-            INSERT INTO session_learns (id, created_at, discovery, context, tags)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO session_learns (id, created_at, discovery, context, tags, spec_id)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             "#,
             rusqlite::params![
                 id,
@@ -104,11 +109,34 @@ pub fn session_learn(db: &Database, input: SessionLearnInput) -> ToolResult {
                 discovery,
                 input.context,
                 input.tags.map(|t| serde_json::to_string(&t).unwrap()),
+                spec_id,
             ],
         )
         .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
-    Ok(Output::ok_with_id(id, "Learning recorded"))
+    let mut skill_info = None;
+    if capture_as_skill.unwrap_or(false) {
+        if let Ok(client) = crate::kleos_client::KleosClient::new() {
+            match client.capture_skill(&discovery, Some("agent-forge")) {
+                Ok(v) => {
+                    skill_info = Some(v);
+                }
+                Err(e) => {
+                    // Best-effort: log but don't fail the session_learn
+                    eprintln!("warning: skill capture failed: {}", e);
+                }
+            }
+        }
+    }
+
+    let mut output = Output::ok_with_id(id, "Learning recorded");
+    if let Some(info) = skill_info {
+        output.data = Some(serde_json::json!({
+            "skill_captured": true,
+            "skill": info,
+        }));
+    }
+    Ok(output)
 }
 
 #[derive(Deserialize)]

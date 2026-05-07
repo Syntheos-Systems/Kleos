@@ -10,6 +10,7 @@ pub struct LogHypothesisInput {
     pub bug_description: Option<String>,
     pub hypothesis: Option<String>,
     pub confidence: Option<f64>,
+    pub spec_id: Option<String>,
 }
 
 pub fn log_hypothesis(db: &Database, input: LogHypothesisInput) -> ToolResult {
@@ -34,10 +35,10 @@ pub fn log_hypothesis(db: &Database, input: LogHypothesisInput) -> ToolResult {
     db.conn()
         .execute(
             r#"
-            INSERT INTO hypotheses (id, created_at, bug_description, hypothesis, confidence)
-            VALUES (?1, ?2, ?3, ?4, ?5)
+            INSERT INTO hypotheses (id, created_at, bug_description, hypothesis, confidence, spec_id)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
             "#,
-            rusqlite::params![id, now, bug_description, hypothesis, confidence],
+            rusqlite::params![id, now, bug_description, hypothesis, confidence, input.spec_id],
         )
         .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
