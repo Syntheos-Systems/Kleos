@@ -954,7 +954,7 @@ pub async fn extract_personality_signals(
 
     if !valid_signals.is_empty() {
         // Invalidate cached profile since we have new signals
-        let _ = invalidate_profile(db, user_id).await;
+        if let Err(e) = invalidate_profile(db, user_id).await { tracing::warn!(error = %e, user_id, "failed to invalidate personality profile cache"); }
         debug!(
             msg = "personality_extracted_fallback",
             memory_id,
@@ -1079,7 +1079,7 @@ pub async fn synthesize_personality_profile(db: &Database, user_id: i64) -> Resu
     // Cache the profile
     let signal_count = input.signals.len() as i64;
     let profile_clone = profile.clone();
-    let _ = db.write(move |conn| {
+    if let Err(e) = db.write(move |conn| {
         conn.execute(
             "INSERT INTO personality_profiles (user_id, profile, signal_count, is_stale)
              VALUES (?1, ?2, ?3, 0)
@@ -1087,7 +1087,8 @@ pub async fn synthesize_personality_profile(db: &Database, user_id: i64) -> Resu
             rusqlite::params![user_id, profile_clone, signal_count],
         ).map_err(rusqlite_to_eng_error)?;
         Ok(())
-    }).await;
+    }).await
+    { tracing::warn!(error = %e, user_id, "failed to cache personality profile"); }
 
     info!(
         msg = "personality_profile_synthesized",

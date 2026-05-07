@@ -630,7 +630,7 @@ async fn deliver_with_retry(
         match req.send().await {
             Ok(resp) if resp.status().is_success() => {
                 tracing::debug!(hook_id, attempt, "webhook delivered");
-                let _ = record_delivery_success(&db, hook_id).await;
+                if let Err(e) = record_delivery_success(&db, hook_id).await { tracing::warn!(error = %e, hook_id, "failed to record delivery success"); }
                 return;
             }
             Ok(resp) => {
@@ -661,7 +661,7 @@ async fn deliver_with_retry(
             "webhook auto-disabled after threshold"
         );
     }
-    let _ = insert_dead_letter(
+    if let Err(e) = insert_dead_letter(
         &db,
         hook_id,
         &event,
@@ -670,7 +670,8 @@ async fn deliver_with_retry(
         last_error.as_deref(),
         last_status,
     )
-    .await;
+    .await
+    { tracing::warn!(error = %e, hook_id, "failed to insert dead letter"); }
 }
 
 /// Emit a webhook event to all matching active webhooks for a user.
@@ -855,7 +856,7 @@ pub async fn emit_test_to_webhook(
     match outcome {
         Ok(resp) if resp.status().is_success() => {
             let status = resp.status().as_u16();
-            let _ = record_delivery_success(db, hook.id).await;
+            if let Err(e) = record_delivery_success(db, hook.id).await { tracing::warn!(error = %e, hook_id = hook.id, "failed to record delivery success"); }
             Ok(WebhookTestReceipt {
                 hook_id: hook.id,
                 event: event.to_string(),
@@ -868,7 +869,7 @@ pub async fn emit_test_to_webhook(
         }
         Ok(resp) => {
             let status = resp.status().as_u16();
-            let _ = record_delivery_failure(db, hook.id).await;
+            if let Err(e) = record_delivery_failure(db, hook.id).await { tracing::warn!(error = %e, hook_id = hook.id, "failed to record delivery failure"); }
             Ok(WebhookTestReceipt {
                 hook_id: hook.id,
                 event: event.to_string(),
@@ -880,7 +881,7 @@ pub async fn emit_test_to_webhook(
             })
         }
         Err(e) => {
-            let _ = record_delivery_failure(db, hook.id).await;
+            if let Err(e) = record_delivery_failure(db, hook.id).await { tracing::warn!(error = %e, hook_id = hook.id, "failed to record delivery failure"); }
             Ok(WebhookTestReceipt {
                 hook_id: hook.id,
                 event: event.to_string(),
