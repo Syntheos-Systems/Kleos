@@ -6,8 +6,9 @@ use axum::{
 };
 use hmac::{Hmac, Mac};
 use kleos_lib::agents;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 use std::{fs, path::PathBuf, sync::OnceLock};
 use subtle::ConstantTimeEq;
 
@@ -199,14 +200,53 @@ async fn get_executions(
     Ok(Json(json!({ "agent_id": id, "executions": executions })))
 }
 
-// Verify an agent credential.
-//
+// ---------------------------------------------------------------------------
+// Verify DTOs
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VerifyExecutionInput {
+    agent_identity_pem: String,
+    actions_log: Vec<ActionEntry>,
+    signature_hex: String,
+}
+
+#[derive(Deserialize, Serialize)]
+struct ActionEntry {
+    ts: i64,
+    kind: String,
+    target: String,
+    result: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VerifyMessageInput {
+    agent_identity_pem: String,
+    message: serde_json::Value,
+    signature_hex: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct VerifyToolManifestInput {
+    agent_identity_pem: String,
+    declared_tools: Vec<String>,
+    signature_hex: String,
+}
+
+// ---------------------------------------------------------------------------
+// Verify handler
+// ---------------------------------------------------------------------------
+
 // Supported kinds:
-//   - passport: fully implemented (Ed25519 signature check)
-//   - execution: 501 -- planned for Phase 2 (action-log replay verification)
-//   - message: 501 -- planned for Phase 2 (arbitrary-JSON signature check)
-//   - tool_manifest: 501 -- planned for Phase 2 (declared-tool registry + sig)
+//   - passport: HMAC-based server-signed credential check
+//   - execution: Ed25519 signature over canonicalized action log
+//   - message: Ed25519 signature over canonicalized JSON message
+//   - tool_manifest: Ed25519 signature over sorted tool list; persists to DB
 async fn verify(
+    ResolvedDb(db): ResolvedDb,
     Json(body): Json<VerifyBody>,
 ) -> Result<Json<Value>, (axum::http::StatusCode, Json<Value>)> {
     if let Some(passport) = body.passport {
@@ -219,24 +259,61 @@ async fn verify(
         return Ok(Json(json!({ "type": "passport", "valid": result })));
     }
 
-    let kind = if body.execution.is_some() {
-        Some("execution")
-    } else if body.message.is_some() {
-        Some("message")
-    } else if body.tool_manifest.is_some() {
-        Some("tool_manifest")
-    } else {
-        None
-    };
+    if let Some(raw) = body.execution {
+        let input: VerifyExecutionInput =
+            serde_json::from_value(raw).map_err(|e| {
+                (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": format!("invalid execution payload: {e}") })),
+                )
+            })?;
+        let verified = verify_execution(&input).map_err(|e| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(json!({ "error": e.0.to_string() })),
+            )
+        })?;
+        return Ok(Json(json!({ "type": "execution", "verified": verified })));
+    }
 
-    if let Some(kind) = kind {
-        return Err((
-            axum::http::StatusCode::NOT_IMPLEMENTED,
-            Json(json!({
-                "type": kind,
-                "error": format!("verification of '{}' is not implemented", kind),
-            })),
-        ));
+    if let Some(raw) = body.message {
+        let input: VerifyMessageInput =
+            serde_json::from_value(raw).map_err(|e| {
+                (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": format!("invalid message payload: {e}") })),
+                )
+            })?;
+        let verified = verify_message(&input).map_err(|e| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(json!({ "error": e.0.to_string() })),
+            )
+        })?;
+        return Ok(Json(json!({ "type": "message", "verified": verified })));
+    }
+
+    if let Some(raw) = body.tool_manifest {
+        let input: VerifyToolManifestInput =
+            serde_json::from_value(raw).map_err(|e| {
+                (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": format!("invalid tool_manifest payload: {e}") })),
+                )
+            })?;
+        let (verified, manifest_hash, first_seen) =
+            verify_tool_manifest(&input, &db).await.map_err(|e| {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": e.0.to_string() })),
+                )
+            })?;
+        return Ok(Json(json!({
+            "type": "tool_manifest",
+            "verified": verified,
+            "manifest_hash": manifest_hash,
+            "first_seen": first_seen,
+        })));
     }
 
     Err((
@@ -245,6 +322,141 @@ async fn verify(
             "error": "Provide 'passport', 'execution', 'message', or 'tool_manifest' to verify",
         })),
     ))
+}
+
+// ---------------------------------------------------------------------------
+// Verify helpers
+// ---------------------------------------------------------------------------
+
+fn verify_execution(input: &VerifyExecutionInput) -> Result<bool, AppError> {
+    // Canonicalize: serialize each action entry with sorted keys, then
+    // wrap in an array. We use serde_json's default key order (struct field
+    // declaration order) which is deterministic for known structs.
+    let canonical = serde_json::to_string(&input.actions_log)
+        .map_err(|e| AppError(kleos_lib::EngError::Internal(e.to_string())))?;
+
+    let ok = kleos_lib::auth_piv::verify_signature(
+        kleos_lib::auth_piv::SignatureAlgo::Ed25519,
+        &input.agent_identity_pem,
+        canonical.as_bytes(),
+        &input.signature_hex,
+    );
+    Ok(ok.is_ok())
+}
+
+fn verify_message(input: &VerifyMessageInput) -> Result<bool, AppError> {
+    // Canonicalize: sort object keys recursively, then serialize with no
+    // extra whitespace.
+    let canonical = canonical_json(&input.message)
+        .map_err(|e| AppError(kleos_lib::EngError::Internal(e.to_string())))?;
+
+    let ok = kleos_lib::auth_piv::verify_signature(
+        kleos_lib::auth_piv::SignatureAlgo::Ed25519,
+        &input.agent_identity_pem,
+        canonical.as_bytes(),
+        &input.signature_hex,
+    );
+    Ok(ok.is_ok())
+}
+
+async fn verify_tool_manifest(
+    input: &VerifyToolManifestInput,
+    db: &std::sync::Arc<kleos_lib::db::Database>,
+) -> Result<(bool, String, bool), AppError> {
+    // Sort the declared tools list for deterministic canonical form.
+    let mut sorted_tools = input.declared_tools.clone();
+    sorted_tools.sort();
+
+    let canonical = serde_json::to_string(&sorted_tools)
+        .map_err(|e| AppError(kleos_lib::EngError::Internal(e.to_string())))?;
+
+    let verified = kleos_lib::auth_piv::verify_signature(
+        kleos_lib::auth_piv::SignatureAlgo::Ed25519,
+        &input.agent_identity_pem,
+        canonical.as_bytes(),
+        &input.signature_hex,
+    )
+    .is_ok();
+
+    // Compute SHA-256 manifest hash.
+    let manifest_hash = {
+        let mut hasher = Sha256::new();
+        hasher.update(canonical.as_bytes());
+        hex::encode(hasher.finalize())
+    };
+
+    if !verified {
+        return Ok((false, manifest_hash, false));
+    }
+
+    // Look up agent_identity_id from PEM, then persist manifest.
+    let pem = input.agent_identity_pem.clone();
+    let hash = manifest_hash.clone();
+    let tools_json = canonical.clone();
+
+    let first_seen = db
+        .write(move |conn| {
+            // Find identity_keys row by pubkey_pem.
+            let identity_id: Option<i64> = match conn.query_row(
+                "SELECT id FROM identity_keys WHERE pubkey_pem = ?1 LIMIT 1",
+                rusqlite::params![pem],
+                |row| row.get(0),
+            ) {
+                Ok(id) => Some(id),
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => {
+                    return Err(kleos_lib::EngError::DatabaseMessage(e.to_string()))
+                }
+            };
+
+            let Some(identity_id) = identity_id else {
+                // Unknown key -- still return verified=true but no DB record.
+                return Ok(false);
+            };
+
+            // INSERT OR IGNORE; check affected rows to determine first_seen.
+            let rows = conn
+                .execute(
+                    "INSERT OR IGNORE INTO tool_manifests \
+                     (agent_identity_id, manifest_hash, declared_tools_json) \
+                     VALUES (?1, ?2, ?3)",
+                    rusqlite::params![identity_id, hash, tools_json],
+                )
+                .map_err(|e| kleos_lib::EngError::DatabaseMessage(e.to_string()))?;
+
+            Ok(rows > 0)
+        })
+        .await
+        .map_err(AppError)?;
+
+    Ok((true, manifest_hash, first_seen))
+}
+
+/// Recursively sort object keys in a JSON value and re-serialize without
+/// extra whitespace, producing a stable canonical form for signature
+/// verification.
+fn canonical_json(value: &serde_json::Value) -> serde_json::Result<String> {
+    let sorted = sort_json_keys(value);
+    serde_json::to_string(&sorted)
+}
+
+fn sort_json_keys(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut sorted: serde_json::Map<String, serde_json::Value> =
+                serde_json::Map::new();
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            for k in keys {
+                sorted.insert(k.clone(), sort_json_keys(&map[k]));
+            }
+            serde_json::Value::Object(sorted)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(sort_json_keys).collect())
+        }
+        other => other.clone(),
+    }
 }
 
 fn signing_secret() -> Result<&'static str, AppError> {
