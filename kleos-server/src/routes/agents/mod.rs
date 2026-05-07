@@ -8,7 +8,7 @@ use hmac::{Hmac, Mac};
 use kleos_lib::agents;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use std::{fs, path::PathBuf, sync::OnceLock};
 use subtle::ConstantTimeEq;
 
@@ -376,11 +376,7 @@ async fn verify_tool_manifest(
     .is_ok();
 
     // Compute SHA-256 manifest hash.
-    let manifest_hash = {
-        let mut hasher = Sha256::new();
-        hasher.update(canonical.as_bytes());
-        hex::encode(hasher.finalize())
-    };
+    let manifest_hash = kleos_lib::artifacts::sha256_hex(canonical.as_bytes());
 
     if !verified {
         return Ok((false, manifest_hash, false));
@@ -389,7 +385,7 @@ async fn verify_tool_manifest(
     // Look up agent_identity_id from PEM, then persist manifest.
     let pem = input.agent_identity_pem.clone();
     let hash = manifest_hash.clone();
-    let tools_json = canonical.clone();
+    let tools_json = canonical;
 
     let first_seen = db
         .write(move |conn| {
