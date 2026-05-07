@@ -86,13 +86,8 @@ pub async fn resolve_text_handler(
             continue;
         }
 
-        let secret_result = super::get_secret_with_fallback(
-            &state,
-            auth.user_id(),
-            &category,
-            &name,
-        )
-        .await;
+        let secret_result =
+            super::get_secret_with_fallback(&state, auth.user_id(), &category, &name).await;
 
         match secret_result {
             Ok((_row, data)) => {
@@ -328,13 +323,8 @@ pub async fn raw_handler(
         .into());
     }
 
-    let (_row, data) = super::get_secret_with_fallback(
-        &state,
-        auth.user_id(),
-        &req.category,
-        &req.name,
-    )
-    .await?;
+    let (_row, data) =
+        super::get_secret_with_fallback(&state, auth.user_id(), &req.category, &req.name).await?;
 
     log_audit(
         &state.db,

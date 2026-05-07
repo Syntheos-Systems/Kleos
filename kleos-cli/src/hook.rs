@@ -73,7 +73,10 @@ async fn fetch_mandatory_rules(client: &Client) -> String {
             rules
         }
         Err(e) => {
-            eprintln!("kleos hook: /policy/mandatory fetch failed ({}), using fallback", e);
+            eprintln!(
+                "kleos hook: /policy/mandatory fetch failed ({}), using fallback",
+                e
+            );
             FALLBACK_MANDATORY_RULES.to_string()
         }
     }
@@ -90,15 +93,15 @@ fn read_policy_cache() -> Option<String> {
     let path = policy_cache_path()?;
     let meta = std::fs::metadata(&path).ok()?;
     let modified = meta.modified().ok()?;
-    let age = std::time::SystemTime::now()
-        .duration_since(modified)
-        .ok()?;
+    let age = std::time::SystemTime::now().duration_since(modified).ok()?;
     if age.as_secs() > POLICY_CACHE_TTL_SECS {
         return None;
     }
     let bytes = std::fs::read(&path).ok()?;
     let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
-    v.get("rules").and_then(|r| r.as_str()).map(|s| s.to_string())
+    v.get("rules")
+        .and_then(|r| r.as_str())
+        .map(|s| s.to_string())
 }
 
 fn write_policy_cache(rules: &str) {
