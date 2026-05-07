@@ -452,4 +452,57 @@ mod tests {
         // Astronomically unlikely to be equal
         assert_ne!(s1, s2);
     }
+
+    #[test]
+    fn tamper_detection_ciphertext_byte_flip() {
+        let key = generate_random_key();
+        let plaintext = b"tamper detection test";
+
+        let mut ciphertext = encrypt(&key, plaintext).unwrap();
+        // Flip a byte in the ciphertext portion (after the nonce)
+        ciphertext[NONCE_SIZE] ^= 0xff;
+
+        let result = decrypt(&key, &ciphertext);
+        assert!(result.is_err(), "decryption must fail when ciphertext is tampered");
+    }
+
+    #[test]
+    fn tamper_detection_nonce_byte_flip() {
+        let key = generate_random_key();
+        let plaintext = b"nonce tamper test";
+
+        let mut ciphertext = encrypt(&key, plaintext).unwrap();
+        // Flip a byte in the nonce portion
+        ciphertext[0] ^= 0xff;
+
+        let result = decrypt(&key, &ciphertext);
+        assert!(result.is_err(), "decryption must fail when nonce is tampered");
+    }
+
+    #[test]
+    fn zero_length_plaintext_roundtrip() {
+        let key = generate_random_key();
+        let plaintext: &[u8] = b"";
+
+        let ciphertext = encrypt(&key, plaintext).unwrap();
+        let decrypted = decrypt(&key, &ciphertext).unwrap();
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn derive_key_from_passphrase_deterministic() {
+        let salt = [0x42u8; SALT_SIZE];
+        let key1 = derive_key_from_passphrase("my-passphrase", &salt).unwrap();
+        let key2 = derive_key_from_passphrase("my-passphrase", &salt).unwrap();
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn derive_key_from_passphrase_differs_with_different_salt() {
+        let salt1 = [0x11u8; SALT_SIZE];
+        let salt2 = [0x22u8; SALT_SIZE];
+        let key1 = derive_key_from_passphrase("my-passphrase", &salt1).unwrap();
+        let key2 = derive_key_from_passphrase("my-passphrase", &salt2).unwrap();
+        assert_ne!(key1, key2);
+    }
 }
