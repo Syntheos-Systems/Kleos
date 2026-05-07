@@ -250,6 +250,41 @@ impl ShellProvider {
             ));
         }
 
+        // H6: defense-in-depth against bypass through script-execution flags.
+        // Even with the metacharacter block, an allow-listed interpreter
+        // (python3, bash, node, ...) plus a "run inline code" flag like -c
+        // or -e gives the caller arbitrary code execution. Reject those
+        // flag/binary combinations regardless of allowlist membership.
+        const HIGH_RISK_FLAGS: &[(&str, &[&str])] = &[
+            ("python", &["-c", "-m"]),
+            ("python3", &["-c", "-m"]),
+            ("bash", &["-c"]),
+            ("sh", &["-c"]),
+            ("zsh", &["-c"]),
+            ("dash", &["-c"]),
+            ("node", &["-e", "-p", "--eval", "--print"]),
+            ("perl", &["-e", "-E"]),
+            ("ruby", &["-e"]),
+            ("php", &["-r"]),
+        ];
+        let exec_basename = std::path::Path::new(&argv[0])
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&argv[0]);
+        if let Some((_, banned)) = HIGH_RISK_FLAGS.iter().find(|(b, _)| *b == exec_basename) {
+            for arg in argv.iter().skip(1) {
+                if banned
+                    .iter()
+                    .any(|f| arg == f || arg.starts_with(&format!("{f}=")))
+                {
+                    return shell_error(format!(
+                        "argument {arg:?} is on the high-risk-flag denylist for {exec_basename}; \
+                         these flags allow inline code execution and bypass the allowlist"
+                    ));
+                }
+            }
+        }
+
         // cwd is optional; if present it must also confine inside the
         // configured base dir.
         let cwd_resolved = match args.get("cwd").and_then(|v| v.as_str()) {
