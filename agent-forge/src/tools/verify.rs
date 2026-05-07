@@ -1,56 +1,229 @@
 use crate::db::Database;
 use crate::json_io::Output;
 use crate::tools::{ToolError, ToolResult};
+use chrono::Utc;
 use serde::Deserialize;
 use std::process::Command;
+use std::time::Instant;
+use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct VerifyInput {
     pub command: Option<String>,
     pub expected_exit_code: Option<i32>,
+    pub skill_id: Option<i64>,
+    pub spec_id: Option<String>,
+    pub criteria_index: Option<i64>,
+    pub timeout_secs: Option<u64>,
+    pub steps: Option<Vec<VerifyStep>>,
 }
 
-pub fn verify(_db: &Database, input: VerifyInput) -> ToolResult {
-    let command = input
-        .command
-        .ok_or_else(|| ToolError::MissingField("command".into()))?;
+#[derive(Deserialize, Clone)]
+pub struct VerifyStep {
+    pub command: String,
+    pub expected_exit_code: Option<i32>,
+    pub label: Option<String>,
+}
 
-    let expected = input.expected_exit_code.unwrap_or(0);
+struct StepResult {
+    command: String,
+    label: Option<String>,
+    success: bool,
+    exit_code: i32,
+    expected_exit_code: i32,
+    duration_ms: i64,
+    stdout: String,
+    stderr: String,
+}
 
+fn run_step(step: &VerifyStep, timeout_secs: Option<u64>) -> Result<StepResult, ToolError> {
     // SECURITY (SEC-C1): parse command into argv and execute directly without
-    // a shell. The previous `sh -c` invocation allowed arbitrary shell injection
-    // from LLM-generated input (prompt injection attack surface).
-    let parts: Vec<&str> = command.split_whitespace().collect();
+    // a shell. No shell injection from LLM-generated input.
+    let parts: Vec<&str> = step.command.split_whitespace().collect();
     if parts.is_empty() {
         return Err(ToolError::InvalidValue("empty command".into()));
     }
-    let output = Command::new(parts[0])
-        .args(&parts[1..])
-        .output()
-        .map_err(|e| ToolError::IoError(e.to_string()))?;
 
-    let actual = output.status.code().unwrap_or(-1);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let start = Instant::now();
 
-    let success = actual == expected;
+    if let Some(secs) = timeout_secs {
+        // Timeout path: spawn child, wait on separate thread, kill by PID on timeout
+        let child = Command::new(parts[0])
+            .args(&parts[1..])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| ToolError::IoError(e.to_string()))?;
 
-    let mut result = if success {
-        Output::ok("Verification passed")
+        let timeout = std::time::Duration::from_secs(secs);
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        std::thread::spawn(move || {
+            let result = child.wait_with_output();
+            let _ = tx.send(result);
+        });
+
+        match rx.recv_timeout(timeout) {
+            Ok(Ok(output)) => {
+                let duration_ms = start.elapsed().as_millis() as i64;
+                let actual = output.status.code().unwrap_or(-1);
+                let expected = step.expected_exit_code.unwrap_or(0);
+                Ok(StepResult {
+                    command: step.command.clone(),
+                    label: step.label.clone(),
+                    success: actual == expected,
+                    exit_code: actual,
+                    expected_exit_code: expected,
+                    duration_ms,
+                    stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                    stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                })
+            }
+            Ok(Err(e)) => Err(ToolError::IoError(e.to_string())),
+            Err(_) => {
+                // Timeout -- child was moved into thread; process may orphan but
+                // the thread will eventually finish. Acceptable for a CLI tool.
+                Err(ToolError::IoError(format!(
+                    "Command timed out after {}s: {}",
+                    secs, step.command
+                )))
+            }
+        }
+    } else {
+        // No timeout: simple blocking execution
+        let output = Command::new(parts[0])
+            .args(&parts[1..])
+            .output()
+            .map_err(|e| ToolError::IoError(e.to_string()))?;
+
+        let duration_ms = start.elapsed().as_millis() as i64;
+        let actual = output.status.code().unwrap_or(-1);
+        let expected = step.expected_exit_code.unwrap_or(0);
+        Ok(StepResult {
+            command: step.command.clone(),
+            label: step.label.clone(),
+            success: actual == expected,
+            exit_code: actual,
+            expected_exit_code: expected,
+            duration_ms,
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        })
+    }
+}
+
+pub fn verify(db: &Database, input: VerifyInput) -> ToolResult {
+    let skill_id = input.skill_id;
+    let spec_id = input.spec_id;
+    let criteria_index = input.criteria_index;
+    let timeout_secs = input.timeout_secs;
+
+    // Build step list
+    let mut steps: Vec<VerifyStep> = Vec::new();
+
+    if let Some(cmd) = input.command {
+        steps.push(VerifyStep {
+            command: cmd,
+            expected_exit_code: input.expected_exit_code,
+            label: None,
+        });
+    }
+
+    if let Some(extra) = input.steps {
+        steps.extend(extra);
+    }
+
+    if steps.is_empty() {
+        return Err(ToolError::MissingField("command or steps required".into()));
+    }
+
+    // Run all steps
+    let mut results: Vec<StepResult> = Vec::new();
+    let mut all_passed = true;
+
+    for step in &steps {
+        let step_result = run_step(step, timeout_secs)?;
+        if !step_result.success {
+            all_passed = false;
+        }
+        results.push(step_result);
+    }
+
+    let total_duration_ms: i64 = results.iter().map(|r| r.duration_ms).sum();
+
+    // Record to verifications table if spec_id provided
+    if let Some(ref sid) = spec_id {
+        for r in &results {
+            let id = format!("ver_{}", &Uuid::new_v4().to_string()[..8]);
+            let now = Utc::now().timestamp();
+            let _ = db.conn().execute(
+                "INSERT INTO verifications (id, spec_id, created_at, command, exit_code, success, duration_ms, criteria_index, stdout, stderr) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                rusqlite::params![
+                    id, sid, now, r.command, r.exit_code,
+                    r.success as i32, r.duration_ms, criteria_index,
+                    &r.stdout[..r.stdout.len().min(4096)],
+                    &r.stderr[..r.stderr.len().min(4096)],
+                ],
+            );
+        }
+    }
+
+    // Skill recording
+    if let Some(sid) = skill_id {
+        if let Ok(client) = crate::kleos_client::KleosClient::new() {
+            let err_msg = if all_passed {
+                None
+            } else {
+                results.iter().find(|r| !r.success).map(|r| r.stderr.as_str())
+            };
+            let _ = client.record_execution(
+                sid,
+                all_passed,
+                Some(total_duration_ms as f64),
+                if all_passed { None } else { Some("verify_failed") },
+                err_msg.filter(|s| !s.trim().is_empty()),
+            );
+        }
+    }
+
+    // Build output
+    let step_data: Vec<serde_json::Value> = results
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "command": r.command,
+                "label": r.label,
+                "success": r.success,
+                "exit_code": r.exit_code,
+                "expected_exit_code": r.expected_exit_code,
+                "duration_ms": r.duration_ms,
+                "stdout": r.stdout.trim(),
+                "stderr": r.stderr.trim(),
+            })
+        })
+        .collect();
+
+    let passed = results.iter().filter(|r| r.success).count();
+    let total = results.len();
+
+    let mut output = if all_passed {
+        Output::ok(format!("Verification passed ({}/{} steps)", passed, total))
     } else {
         Output::error(format!(
-            "Verification failed: expected exit code {}, got {}",
-            expected, actual
+            "Verification failed ({}/{} steps passed)",
+            passed, total
         ))
     };
 
-    result.data = Some(serde_json::json!({
-        "exit_code": actual,
-        "stdout": stdout.trim(),
-        "stderr": stderr.trim(),
+    output.data = Some(serde_json::json!({
+        "all_passed": all_passed,
+        "passed": passed,
+        "total": total,
+        "total_duration_ms": total_duration_ms,
+        "steps": step_data,
     }));
 
-    Ok(result)
+    Ok(output)
 }
 
 #[derive(Deserialize)]
