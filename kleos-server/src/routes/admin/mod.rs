@@ -830,6 +830,18 @@ async fn backup_handler(
         })
         .await
         .map_err(AppError)?;
+
+    // M1: integrity-check the backup BEFORE streaming it. Without this,
+    // operators could save a corrupted file and only discover it at restore
+    // time. integrity_check runs SQLite's `PRAGMA integrity_check` against
+    // the snapshot and returns early on any reported issue.
+    if let Err(e) = kleos_lib::db::backup::integrity_check(&tmp_path).await {
+        let _ = tokio::fs::remove_file(&tmp_path).await;
+        return Err(AppError(kleos_lib::EngError::Internal(format!(
+            "backup integrity check failed: {e}"
+        ))));
+    }
+
     let bytes = tokio::fs::read(&tmp)
         .await
         .map_err(|e| AppError(kleos_lib::EngError::Internal(e.to_string())))?;
