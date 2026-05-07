@@ -193,13 +193,12 @@ impl KleosWriter {
             return;
         }
         let buffer = std::mem::take(&mut self.retry_buffer);
-        let failed = Vec::new();
         for candidate in buffer {
             if !self.post_memory(candidate).await {
                 tracing::warn!("retry failed, dropping memory");
             }
         }
-        self.retry_buffer = failed;
+        self.retry_buffer.clear();
     }
 
     pub async fn store_summary(&mut self, content: &str, session_id: &str, project: &str) -> bool {

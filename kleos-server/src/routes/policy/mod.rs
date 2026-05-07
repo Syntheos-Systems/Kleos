@@ -1,6 +1,5 @@
 use axum::{routing::get, Json, Router};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
 use crate::state::AppState;
 
@@ -19,7 +18,7 @@ pub fn router() -> Router<AppState> {
 
 async fn mandatory() -> Json<Value> {
     let rules = MANDATORY_RULES;
-    let hash = hex::encode(Sha256::digest(rules.as_bytes()));
+    let hash = kleos_lib::artifacts::sha256_hex(rules.as_bytes());
     Json(json!({
         "rules": rules,
         "etag": hash,
