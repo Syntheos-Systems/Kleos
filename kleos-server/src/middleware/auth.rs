@@ -20,6 +20,7 @@ const OPEN_PATHS: &[&str] = &[
     "/.well-known/agent-card.json",
     "/.well-known/agent-commerce.json",
     "/llms.txt",
+    "/policy/mandatory",
 ];
 
 const MAX_AUTH_BODY_BUFFER: usize = 2 * 1024 * 1024;
