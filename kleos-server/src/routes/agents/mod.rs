@@ -260,13 +260,12 @@ async fn verify(
     }
 
     if let Some(raw) = body.execution {
-        let input: VerifyExecutionInput =
-            serde_json::from_value(raw).map_err(|e| {
-                (
-                    axum::http::StatusCode::BAD_REQUEST,
-                    Json(json!({ "error": format!("invalid execution payload: {e}") })),
-                )
-            })?;
+        let input: VerifyExecutionInput = serde_json::from_value(raw).map_err(|e| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("invalid execution payload: {e}") })),
+            )
+        })?;
         let verified = verify_execution(&input).map_err(|e| {
             (
                 axum::http::StatusCode::BAD_REQUEST,
@@ -277,13 +276,12 @@ async fn verify(
     }
 
     if let Some(raw) = body.message {
-        let input: VerifyMessageInput =
-            serde_json::from_value(raw).map_err(|e| {
-                (
-                    axum::http::StatusCode::BAD_REQUEST,
-                    Json(json!({ "error": format!("invalid message payload: {e}") })),
-                )
-            })?;
+        let input: VerifyMessageInput = serde_json::from_value(raw).map_err(|e| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("invalid message payload: {e}") })),
+            )
+        })?;
         let verified = verify_message(&input).map_err(|e| {
             (
                 axum::http::StatusCode::BAD_REQUEST,
@@ -294,13 +292,12 @@ async fn verify(
     }
 
     if let Some(raw) = body.tool_manifest {
-        let input: VerifyToolManifestInput =
-            serde_json::from_value(raw).map_err(|e| {
-                (
-                    axum::http::StatusCode::BAD_REQUEST,
-                    Json(json!({ "error": format!("invalid tool_manifest payload: {e}") })),
-                )
-            })?;
+        let input: VerifyToolManifestInput = serde_json::from_value(raw).map_err(|e| {
+            (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("invalid tool_manifest payload: {e}") })),
+            )
+        })?;
         let (verified, manifest_hash, first_seen) =
             verify_tool_manifest(&input, &db).await.map_err(|e| {
                 (
@@ -404,9 +401,7 @@ async fn verify_tool_manifest(
             ) {
                 Ok(id) => Some(id),
                 Err(rusqlite::Error::QueryReturnedNoRows) => None,
-                Err(e) => {
-                    return Err(kleos_lib::EngError::DatabaseMessage(e.to_string()))
-                }
+                Err(e) => return Err(kleos_lib::EngError::DatabaseMessage(e.to_string())),
             };
 
             let Some(identity_id) = identity_id else {
@@ -443,8 +438,7 @@ fn canonical_json(value: &serde_json::Value) -> serde_json::Result<String> {
 fn sort_json_keys(value: &serde_json::Value) -> serde_json::Value {
     match value {
         serde_json::Value::Object(map) => {
-            let mut sorted: serde_json::Map<String, serde_json::Value> =
-                serde_json::Map::new();
+            let mut sorted: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
             let mut keys: Vec<&String> = map.keys().collect();
             keys.sort();
             for k in keys {

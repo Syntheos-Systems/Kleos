@@ -570,15 +570,17 @@ fn apply_schema_v47_gate_requests_session_id(conn: &Connection) -> Result<()> {
 fn apply_schema_v48_supervisor_injections_fix(conn: &Connection) -> Result<()> {
     if !table_has_column(conn, "supervisor_injections", "rule_id")? {
         conn.execute_batch(
-            "ALTER TABLE supervisor_injections ADD COLUMN rule_id TEXT NOT NULL DEFAULT '';"
+            "ALTER TABLE supervisor_injections ADD COLUMN rule_id TEXT NOT NULL DEFAULT '';",
         )
-        .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v48 (rule_id) failed: {e}")))?;
+        .map_err(|e| {
+            EngError::DatabaseMessage(format!("tenant schema v48 (rule_id) failed: {e}"))
+        })?;
     }
     if !table_has_column(conn, "supervisor_injections", "claimed_at")? {
-        conn.execute_batch(
-            "ALTER TABLE supervisor_injections ADD COLUMN claimed_at TEXT;"
-        )
-        .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v48 (claimed_at) failed: {e}")))?;
+        conn.execute_batch("ALTER TABLE supervisor_injections ADD COLUMN claimed_at TEXT;")
+            .map_err(|e| {
+                EngError::DatabaseMessage(format!("tenant schema v48 (claimed_at) failed: {e}"))
+            })?;
     }
     // Rebuild the partial index to use claimed_at instead of consumed
     conn.execute_batch(
@@ -4623,7 +4625,13 @@ mod tests {
         conn.execute(
             "INSERT INTO axon_subscriptions (agent, channel, filter_type, webhook_url, user_id) \
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params!["test-agent", "ship.channel", None::<String>, None::<String>, 1_i64],
+            rusqlite::params![
+                "test-agent",
+                "ship.channel",
+                None::<String>,
+                None::<String>,
+                1_i64
+            ],
         )
         .unwrap();
         let sub_id = conn.last_insert_rowid();
@@ -6382,7 +6390,12 @@ mod tests {
         conn.execute(
             "INSERT INTO episodes (title, session_id, agent, summary) \
              VALUES (?1, ?2, ?3, ?4)",
-            rusqlite::params!["test-value", "sess-test", "test-agent", "found relevant data in logs"],
+            rusqlite::params![
+                "test-value",
+                "sess-test",
+                "test-agent",
+                "found relevant data in logs"
+            ],
         )
         .unwrap();
         let eid = conn.last_insert_rowid();

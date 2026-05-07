@@ -98,7 +98,9 @@ async fn main() -> anyhow::Result<()> {
             key
         }
         other => {
-            anyhow::bail!("unknown CREDD_AUTH_MODE `{other}`; expected `yubikey`, `password`, or `keyfile`");
+            anyhow::bail!(
+                "unknown CREDD_AUTH_MODE `{other}`; expected `yubikey`, `password`, or `keyfile`"
+            );
         }
     };
 

@@ -954,7 +954,9 @@ pub async fn extract_personality_signals(
 
     if !valid_signals.is_empty() {
         // Invalidate cached profile since we have new signals
-        if let Err(e) = invalidate_profile(db, user_id).await { tracing::warn!(error = %e, user_id, "failed to invalidate personality profile cache"); }
+        if let Err(e) = invalidate_profile(db, user_id).await {
+            tracing::warn!(error = %e, user_id, "failed to invalidate personality profile cache");
+        }
         debug!(
             msg = "personality_extracted_fallback",
             memory_id,

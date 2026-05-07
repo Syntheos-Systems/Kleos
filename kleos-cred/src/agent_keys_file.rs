@@ -383,11 +383,19 @@ mod tests {
         let path = dir.path().join("agent-keys.json");
         let mut store = FileAgentKeyStore::load_from(path.clone()).unwrap();
         store
-            .generate("perm-test-agent", "perm test", vec!["bootstrap/perm-test-agent".into()])
+            .generate(
+                "perm-test-agent",
+                "perm test",
+                vec!["bootstrap/perm-test-agent".into()],
+            )
             .unwrap();
         let metadata = std::fs::metadata(&path).unwrap();
         let mode = metadata.permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600, "agent-keys.json must be mode 0600, got {:#o}", mode);
+        assert_eq!(
+            mode, 0o600,
+            "agent-keys.json must be mode 0600, got {:#o}",
+            mode
+        );
     }
 
     #[test]
@@ -419,7 +427,10 @@ mod tests {
             .generate("dup-agent", "first", vec!["bootstrap/dup-agent".into()])
             .unwrap();
         let r = store.generate("dup-agent", "second", vec!["bootstrap/dup-agent".into()]);
-        assert!(r.is_err(), "generating a second active key for the same id must fail");
+        assert!(
+            r.is_err(),
+            "generating a second active key for the same id must fail"
+        );
     }
 
     #[test]

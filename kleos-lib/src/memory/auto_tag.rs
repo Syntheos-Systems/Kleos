@@ -45,7 +45,11 @@ pub fn infer_category(content: &str) -> Option<&'static str> {
     if lower.contains("decided") || lower.contains("chose") || lower.contains("rejected") {
         return Some("decision");
     }
-    if lower.contains("fixed") || lower.contains("bug") || lower.contains("broken") || lower.contains("error") {
+    if lower.contains("fixed")
+        || lower.contains("bug")
+        || lower.contains("broken")
+        || lower.contains("error")
+    {
         return Some("issue");
     }
     if lower.contains("how to") || lower.contains("step 1") || lower.contains("step 2") {

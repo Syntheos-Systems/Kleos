@@ -21,10 +21,12 @@ impl Config {
                     .join("projects")
             });
 
-        let kleos_url = std::env::var("KLEOS_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:4200".to_string());
+        let kleos_url =
+            std::env::var("KLEOS_URL").unwrap_or_else(|_| "http://127.0.0.1:4200".to_string());
 
-        let api_key = std::env::var("KLEOS_API_KEY").ok().filter(|k| !k.is_empty());
+        let api_key = std::env::var("KLEOS_API_KEY")
+            .ok()
+            .filter(|k| !k.is_empty());
 
         let summary_idle_secs: u64 = std::env::var("KLEOS_INGEST_IDLE_SECS")
             .ok()
@@ -40,13 +42,12 @@ impl Config {
                     .join("ledger.db")
             });
 
-        let host = std::env::var("KLEOS_INGEST_HOST")
-            .unwrap_or_else(|_| {
-                std::fs::read_to_string("/etc/hostname")
-                    .unwrap_or_else(|_| "unknown".to_string())
-                    .trim()
-                    .to_string()
-            });
+        let host = std::env::var("KLEOS_INGEST_HOST").unwrap_or_else(|_| {
+            std::fs::read_to_string("/etc/hostname")
+                .unwrap_or_else(|_| "unknown".to_string())
+                .trim()
+                .to_string()
+        });
 
         Config {
             watch_dir,

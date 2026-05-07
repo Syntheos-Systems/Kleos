@@ -131,11 +131,13 @@ fn main() {
                     tools::think::declare_unknowns(&db, input).map_err(|e| e.to_string())
                 })
         }
-        Commands::ConsiderApproaches => read_input(&cli.input)
-            .map_err(|e| e.to_string())
-            .and_then(|input| {
-                tools::approaches::consider_approaches(&db, input).map_err(|e| e.to_string())
-            }),
+        Commands::ConsiderApproaches => {
+            read_input(&cli.input)
+                .map_err(|e| e.to_string())
+                .and_then(|input| {
+                    tools::approaches::consider_approaches(&db, input).map_err(|e| e.to_string())
+                })
+        }
         Commands::RepoMap => read_input(&cli.input)
             .map_err(|e| e.to_string())
             .and_then(|input| {

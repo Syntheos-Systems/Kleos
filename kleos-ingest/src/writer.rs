@@ -167,7 +167,10 @@ impl KleosWriter {
                         }
                     }
                 } else {
-                    tracing::warn!(status = 401, "kleos store failed (unauthorized), buffering for retry");
+                    tracing::warn!(
+                        status = 401,
+                        "kleos store failed (unauthorized), buffering for retry"
+                    );
                 }
                 false
             }
@@ -241,7 +244,9 @@ impl KleosWriter {
                     if let Some(signer) = &self.signer {
                         signer.clear_session();
                     }
-                    tracing::debug!("session token expired (401), retrying summary with fresh PIV signing");
+                    tracing::debug!(
+                        "session token expired (401), retrying summary with fresh PIV signing"
+                    );
                     let req2 = self
                         .client
                         .post(format!("{}{}", self.base_url, path))

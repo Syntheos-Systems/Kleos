@@ -464,11 +464,7 @@ pub async fn store(db: &Database, mut req: StoreRequest) -> Result<StoreResult> 
 
     // Auto-tag if tags empty
     let tags_json = {
-        let has_tags = req
-            .tags
-            .as_ref()
-            .map(|t| !t.is_empty())
-            .unwrap_or(false);
+        let has_tags = req.tags.as_ref().map(|t| !t.is_empty()).unwrap_or(false);
         if has_tags {
             normalize_tags(&req.tags)
         } else {

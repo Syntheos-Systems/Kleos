@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -113,7 +113,8 @@ fn extract_content(value: &serde_json::Value) -> Option<String> {
     if let Some(msg) = value.get("message") {
         if let Some(content) = msg.get("content") {
             if let Some(arr) = content.as_array() {
-                let texts: Vec<&str> = arr.iter()
+                let texts: Vec<&str> = arr
+                    .iter()
                     .filter_map(|block| {
                         if block.get("type").and_then(|t| t.as_str()) == Some("text") {
                             block.get("text").and_then(|t| t.as_str())

@@ -463,7 +463,10 @@ mod tests {
         ciphertext[NONCE_SIZE] ^= 0xff;
 
         let result = decrypt(&key, &ciphertext);
-        assert!(result.is_err(), "decryption must fail when ciphertext is tampered");
+        assert!(
+            result.is_err(),
+            "decryption must fail when ciphertext is tampered"
+        );
     }
 
     #[test]
@@ -476,7 +479,10 @@ mod tests {
         ciphertext[0] ^= 0xff;
 
         let result = decrypt(&key, &ciphertext);
-        assert!(result.is_err(), "decryption must fail when nonce is tampered");
+        assert!(
+            result.is_err(),
+            "decryption must fail when nonce is tampered"
+        );
     }
 
     #[test]

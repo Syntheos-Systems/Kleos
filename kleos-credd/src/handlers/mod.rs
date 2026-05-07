@@ -97,7 +97,11 @@ pub(crate) async fn resolve_from_kleos(
     let kleos_url = std::env::var("KLEOS_URL")
         .or_else(|_| std::env::var("ENGRAM_URL"))
         .map_err(|_| {
-            tracing::error!("KLEOS_URL not set; cannot resolve {}/{} from Kleos", category, name);
+            tracing::error!(
+                "KLEOS_URL not set; cannot resolve {}/{} from Kleos",
+                category,
+                name
+            );
             CredError::InvalidInput("KLEOS_URL not set".into())
         })?;
 
@@ -128,13 +132,10 @@ pub(crate) async fn resolve_from_kleos(
         return Err(CredError::NotFound("no auth available for Kleos vault".into()).into());
     }
 
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!("Kleos /list failed for {}/{}: {}", category, name, e);
-            CredError::InvalidInput(format!("kleos unreachable: {}", e))
-        })?;
+    let resp = req.send().await.map_err(|e| {
+        tracing::error!("Kleos /list failed for {}/{}: {}", category, name, e);
+        CredError::InvalidInput(format!("kleos unreachable: {}", e))
+    })?;
 
     // Capture session token if issued
     if let Some(signer) = &state.kleos_signer {
@@ -204,7 +205,15 @@ pub(crate) async fn get_secret_with_fallback(
 ) -> Result<(SecretRow, SecretData), AppError> {
     use kleos_cred::storage::get_secret;
 
-    match get_secret(&state.db, user_id, category, name, state.master_key.as_ref()).await {
+    match get_secret(
+        &state.db,
+        user_id,
+        category,
+        name,
+        state.master_key.as_ref(),
+    )
+    .await
+    {
         Ok(result) => Ok(result),
         Err(CredError::NotFound(_)) => {
             tracing::debug!("{}/{} not in local DB, trying Kleos vault", category, name);

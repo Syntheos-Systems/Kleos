@@ -1,8 +1,11 @@
 use clap::Parser;
-use rusqlite::{Connection, Result, params};
+use rusqlite::{params, Connection, Result};
 
 #[derive(Parser, Debug)]
-#[command(name = "kleos-cleanup", about = "One-shot cleanup of activity/growth pollution in memories table")]
+#[command(
+    name = "kleos-cleanup",
+    about = "One-shot cleanup of activity/growth pollution in memories table"
+)]
 struct Args {
     /// Path to the SQLite database file
     #[arg(long)]
@@ -30,9 +33,19 @@ fn parse_activity_content(content: &str) -> (String, Option<String>, String, Str
         }
     }
     match parts.len() {
-        3 => (parts[0].clone(), Some(parts[1].clone()), parts[2].clone(), rest.to_string()),
+        3 => (
+            parts[0].clone(),
+            Some(parts[1].clone()),
+            parts[2].clone(),
+            rest.to_string(),
+        ),
         2 => (parts[0].clone(), None, parts[1].clone(), rest.to_string()),
-        _ => ("unknown".to_string(), None, "unknown".to_string(), content.to_string()),
+        _ => (
+            "unknown".to_string(),
+            None,
+            "unknown".to_string(),
+            content.to_string(),
+        ),
     }
 }
 
@@ -52,16 +65,18 @@ fn step_a_move_activity(conn: &Connection, execute: bool) -> Result<usize> {
         "SELECT id, content, importance, project, user_id, created_at FROM memories WHERE category = 'activity'"
     )?;
 
-    let rows: Vec<ActivityRow> = stmt.query_map([], |row| {
-        Ok(ActivityRow {
-            id: row.get(0)?,
-            content: row.get(1)?,
-            importance: row.get(2)?,
-            project: row.get(3)?,
-            user_id: row.get(4)?,
-            created_at: row.get(5)?,
-        })
-    })?.collect::<Result<Vec<_>>>()?;
+    let rows: Vec<ActivityRow> = stmt
+        .query_map([], |row| {
+            Ok(ActivityRow {
+                id: row.get(0)?,
+                content: row.get(1)?,
+                importance: row.get(2)?,
+                project: row.get(3)?,
+                user_id: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
 
     let count = rows.len();
 
@@ -77,12 +92,21 @@ fn step_a_move_activity(conn: &Connection, execute: bool) -> Result<usize> {
             )?;
             conn.execute("DELETE FROM memories WHERE id = ?1", params![row.id])?;
         }
-        println!("  Moved {} activity rows to activity_log and deleted from memories.", count);
+        println!(
+            "  Moved {} activity rows to activity_log and deleted from memories.",
+            count
+        );
     } else {
-        println!("  [DRY RUN] Would move {} activity rows to activity_log.", count);
+        println!(
+            "  [DRY RUN] Would move {} activity rows to activity_log.",
+            count
+        );
         for row in rows.iter().take(5) {
             let (agent, project, action, summary) = parse_activity_content(&row.content);
-            println!("    id={} agent={} project={:?} action={} summary={:.60}", row.id, agent, project, action, summary);
+            println!(
+                "    id={} agent={} project={:?} action={} summary={:.60}",
+                row.id, agent, project, action, summary
+            );
         }
         if count > 5 {
             println!("    ... and {} more", count - 5);
@@ -105,17 +129,19 @@ fn step_b_dedup_growth(conn: &Connection, execute: bool) -> Result<usize> {
     let mut stmt = conn.prepare(
         "SELECT id, substr(content, 1, 100) as prefix, importance, created_at \
          FROM memories WHERE category = 'growth' \
-         ORDER BY substr(content, 1, 100), importance DESC, created_at ASC"
+         ORDER BY substr(content, 1, 100), importance DESC, created_at ASC",
     )?;
 
-    let rows: Vec<GrowthRow> = stmt.query_map([], |row| {
-        Ok(GrowthRow {
-            id: row.get(0)?,
-            prefix: row.get(1)?,
-            _importance: row.get(2)?,
-            _created_at: row.get(3)?,
-        })
-    })?.collect::<Result<Vec<_>>>()?;
+    let rows: Vec<GrowthRow> = stmt
+        .query_map([], |row| {
+            Ok(GrowthRow {
+                id: row.get(0)?,
+                prefix: row.get(1)?,
+                _importance: row.get(2)?,
+                _created_at: row.get(3)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
 
     // Group by prefix, keep first per group, archive the rest
     let mut to_archive: Vec<i64> = Vec::new();
@@ -136,7 +162,10 @@ fn step_b_dedup_growth(conn: &Connection, execute: bool) -> Result<usize> {
 
     if execute {
         for id in &to_archive {
-            conn.execute("UPDATE memories SET is_archived = 1 WHERE id = ?1", params![id])?;
+            conn.execute(
+                "UPDATE memories SET is_archived = 1 WHERE id = ?1",
+                params![id],
+            )?;
         }
         println!("  Archived {} duplicate growth rows.", count);
     } else {
@@ -156,7 +185,10 @@ fn step_c_rebuild_fts(conn: &Connection, execute: bool) -> Result<()> {
     println!("Step C: Rebuilding FTS index...");
 
     if execute {
-        conn.execute("INSERT INTO memories_fts(memories_fts) VALUES('rebuild')", [])?;
+        conn.execute(
+            "INSERT INTO memories_fts(memories_fts) VALUES('rebuild')",
+            [],
+        )?;
         println!("  FTS index rebuilt.");
     } else {
         println!("  [DRY RUN] Would rebuild FTS index.");
@@ -182,10 +214,12 @@ fn main() -> Result<()> {
         let pragma_val = format!("x'{}'", key);
         conn.pragma_update(None, "key", &pragma_val)?;
         conn.pragma_query_value(None, "schema_version", |_| Ok(()))
-            .map_err(|_| rusqlite::Error::SqliteFailure(
-                rusqlite::ffi::Error::new(26),
-                Some("PRAGMA key failed -- wrong key or not a SQLCipher database".into()),
-            ))?;
+            .map_err(|_| {
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(26),
+                    Some("PRAGMA key failed -- wrong key or not a SQLCipher database".into()),
+                )
+            })?;
     }
 
     let activity_count = step_a_move_activity(&conn, args.execute)?;
@@ -198,9 +232,15 @@ fn main() -> Result<()> {
     println!();
 
     if args.execute {
-        println!("Done. Moved {} activity rows, archived {} duplicate growth rows.", activity_count, growth_count);
+        println!(
+            "Done. Moved {} activity rows, archived {} duplicate growth rows.",
+            activity_count, growth_count
+        );
     } else {
-        println!("Dry run complete. Would move {} activity rows, archive {} duplicate growth rows.", activity_count, growth_count);
+        println!(
+            "Dry run complete. Would move {} activity rows, archive {} duplicate growth rows.",
+            activity_count, growth_count
+        );
         println!("Re-run with --execute to apply changes.");
     }
 

@@ -465,11 +465,18 @@ mod tests {
         let fp = pubkey_fingerprint(pem);
         // SHA-256 is 32 bytes = 31 colons separating 32 two-char hex groups
         let parts: Vec<&str> = fp.split(':').collect();
-        assert_eq!(parts.len(), 32, "fingerprint must have 32 colon-separated bytes");
+        assert_eq!(
+            parts.len(),
+            32,
+            "fingerprint must have 32 colon-separated bytes"
+        );
         for part in &parts {
             assert_eq!(part.len(), 2, "each byte must be 2 uppercase hex chars");
-            assert!(part.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_lowercase()),
-                "hex chars must be uppercase");
+            assert!(
+                part.chars()
+                    .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_lowercase()),
+                "hex chars must be uppercase"
+            );
         }
     }
 
@@ -488,8 +495,11 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("KEY_MANAGEMENT") || msg.contains("9D") || msg.contains("9d"),
-            "error should mention KEY_MANAGEMENT slot, got: {}", msg);
+        assert!(
+            msg.contains("KEY_MANAGEMENT") || msg.contains("9D") || msg.contains("9d"),
+            "error should mention KEY_MANAGEMENT slot, got: {}",
+            msg
+        );
     }
 
     #[test]
@@ -499,7 +509,13 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         let msg = err.to_string();
-        assert!(msg.contains("AUTHENTICATION") || msg.contains("SIGNATURE") || msg.contains("9A") || msg.contains("9a"),
-            "error should mention valid slots, got: {}", msg);
+        assert!(
+            msg.contains("AUTHENTICATION")
+                || msg.contains("SIGNATURE")
+                || msg.contains("9A")
+                || msg.contains("9a"),
+            "error should mention valid slots, got: {}",
+            msg
+        );
     }
 }

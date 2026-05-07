@@ -1,4 +1,6 @@
-use notify::{Config as NotifyConfig, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use notify::{
+    Config as NotifyConfig, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher,
+};
 use std::collections::HashMap;
 use std::os::unix::net::UnixDatagram;
 use std::path::PathBuf;
@@ -39,12 +41,14 @@ pub async fn run(config: Config, ledger: Ledger, writer: KleosWriter) {
                 }
             },
             NotifyConfig::default(),
-        ).expect("failed to create file watcher");
+        )
+        .expect("failed to create file watcher");
 
         if !watch_dir.exists() {
             std::fs::create_dir_all(&watch_dir).expect("failed to create watch directory");
         }
-        watcher.watch(&watch_dir, RecursiveMode::Recursive)
+        watcher
+            .watch(&watch_dir, RecursiveMode::Recursive)
             .expect("failed to watch directory");
 
         tracing::info!(dir = %watch_dir.display(), "file watcher started");
