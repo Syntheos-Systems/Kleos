@@ -1,4 +1,4 @@
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -12,8 +12,7 @@ impl Ledger {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("failed to create ledger dir: {}", e))?;
         }
-        let conn = Connection::open(path)
-            .map_err(|e| format!("failed to open ledger: {}", e))?;
+        let conn = Connection::open(path).map_err(|e| format!("failed to open ledger: {}", e))?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS files (
                 path TEXT PRIMARY KEY,
@@ -29,9 +28,12 @@ impl Ledger {
                 last_activity_at INTEGER NOT NULL,
                 memories_stored INTEGER NOT NULL DEFAULT 0,
                 decisions_extracted INTEGER NOT NULL DEFAULT 0
-            );"
-        ).map_err(|e| format!("failed to init ledger schema: {}", e))?;
-        Ok(Self { conn: Mutex::new(conn) })
+            );",
+        )
+        .map_err(|e| format!("failed to init ledger schema: {}", e))?;
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     pub fn get_offset(&self, path: &str) -> i64 {
@@ -40,7 +42,8 @@ impl Ledger {
             "SELECT last_offset FROM files WHERE path = ?1",
             params![path],
             |row| row.get(0),
-        ).unwrap_or(0)
+        )
+        .unwrap_or(0)
     }
 
     pub fn set_offset(&self, path: &str, offset: i64, project: &str, session_id: &str) {
@@ -60,7 +63,9 @@ impl Ledger {
             "SELECT summarized FROM files WHERE path = ?1",
             params![path],
             |row| row.get::<_, i32>(0),
-        ).unwrap_or(0) != 0
+        )
+        .unwrap_or(0)
+            != 0
     }
 
     pub fn mark_summarized(&self, path: &str) {
@@ -86,15 +91,23 @@ impl Ledger {
 
     pub fn print_stats(&self) {
         let conn = self.conn.lock().unwrap();
-        let file_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM files", [], |row| row.get(0)
-        ).unwrap_or(0);
-        let total_memories: i64 = conn.query_row(
-            "SELECT COALESCE(SUM(memories_stored), 0) FROM session_stats", [], |row| row.get(0)
-        ).unwrap_or(0);
-        let active_files: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM files WHERE summarized = 0", [], |row| row.get(0)
-        ).unwrap_or(0);
+        let file_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM files", [], |row| row.get(0))
+            .unwrap_or(0);
+        let total_memories: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(memories_stored), 0) FROM session_stats",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let active_files: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM files WHERE summarized = 0",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
         println!("Ledger stats:");
         println!("  Files tracked: {}", file_count);
         println!("  Active (unsummarized): {}", active_files);

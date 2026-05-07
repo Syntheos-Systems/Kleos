@@ -22,7 +22,12 @@ impl Extractor {
         }
     }
 
-    pub fn extract(&mut self, turn_text: &str, session_id: &str, project: &str) -> Option<MemoryCandidate> {
+    pub fn extract(
+        &mut self,
+        turn_text: &str,
+        session_id: &str,
+        project: &str,
+    ) -> Option<MemoryCandidate> {
         let trimmed = turn_text.trim();
 
         // Skip short turns (quick acks)
@@ -33,7 +38,8 @@ impl Extractor {
         // In-session dedup: skip if same 200-char prefix seen in last 10 min
         let prefix: String = trimmed.chars().take(200).collect();
         let now = Instant::now();
-        self.recent_hashes.retain(|_, t| now.duration_since(*t).as_secs() < 600);
+        self.recent_hashes
+            .retain(|_, t| now.duration_since(*t).as_secs() < 600);
         if self.recent_hashes.contains_key(&prefix) {
             return None;
         }
@@ -49,19 +55,38 @@ impl Extractor {
             importance = 6;
             tags.push("deploy".to_string());
             infer_service_tags(&lower, &mut tags);
-        } else if contains_any(&lower, &["decided", "chose", "rejected", "picked", "went with"]) {
+        } else if contains_any(
+            &lower,
+            &["decided", "chose", "rejected", "picked", "went with"],
+        ) {
             category = "decision";
             importance = 8;
             tags.push("decision".to_string());
-        } else if contains_any(&lower, &["i want", "i prefer", "don't do", "always do", "never do", "from now on"]) {
+        } else if contains_any(
+            &lower,
+            &[
+                "i want",
+                "i prefer",
+                "don't do",
+                "always do",
+                "never do",
+                "from now on",
+            ],
+        ) {
             category = "decision";
             importance = 7;
             tags.push("preference".to_string());
-        } else if contains_any(&lower, &["fixed", "bug", "broken", "error", "stack trace", "panic"]) {
+        } else if contains_any(
+            &lower,
+            &["fixed", "bug", "broken", "error", "stack trace", "panic"],
+        ) {
             category = "issue";
             importance = 7;
             infer_service_tags(&lower, &mut tags);
-        } else if contains_any(&lower, &["how to", "step 1", "step 2", "steps:", "procedure"]) {
+        } else if contains_any(
+            &lower,
+            &["how to", "step 1", "step 2", "steps:", "procedure"],
+        ) {
             category = "reference";
             importance = 5;
         } else if has_infra_info(&lower) {
@@ -102,14 +127,24 @@ fn has_commit_hash(text: &str) -> bool {
 }
 
 fn has_infra_info(lower: &str) -> bool {
-    contains_any(lower, &["172.", "192.168.", "10.", "port ", ":4200", ":8080", ":443", "ssh ", "systemctl"])
+    contains_any(
+        lower,
+        &[
+            "172.",
+            "192.168.",
+            "10.",
+            "port ",
+            ":4200",
+            ":8080",
+            ":443",
+            "ssh ",
+            "systemctl",
+        ],
+    )
 }
 
 fn infer_service_tags(lower: &str, tags: &mut Vec<String>) {
-    let services = [
-        "kleos", "engram", "credd",
-        "eidolon", "kleos-ingest",
-    ];
+    let services = ["kleos", "engram", "credd", "eidolon", "kleos-ingest"];
     for svc in services {
         if lower.contains(svc) {
             tags.push(svc.to_string());
@@ -117,5 +152,4 @@ fn infer_service_tags(lower: &str, tags: &mut Vec<String>) {
     }
 }
 
-fn infer_host_tags(_lower: &str, _tags: &mut Vec<String>) {
-}
+fn infer_host_tags(_lower: &str, _tags: &mut Vec<String>) {}

@@ -56,7 +56,10 @@ pub async fn list_handler(
                 if !auth.can_access_category(&entry.category) {
                     continue;
                 }
-                let secret_type = match kleos_sync::decrypt_v3_entry(&entry.hex_data, state.master_key.as_ref()) {
+                let secret_type = match kleos_sync::decrypt_v3_entry(
+                    &entry.hex_data,
+                    state.master_key.as_ref(),
+                ) {
                     Ok(data) => data.secret_type().to_string(),
                     Err(_) => "encrypted".to_string(),
                 };
@@ -112,7 +115,14 @@ pub async fn store_handler(
     .await?;
 
     // Sync to Kleos v3 (non-fatal)
-    kleos_sync::store_to_kleos(&state, &category, &name, &body.data, state.master_key.as_ref()).await;
+    kleos_sync::store_to_kleos(
+        &state,
+        &category,
+        &name,
+        &body.data,
+        state.master_key.as_ref(),
+    )
+    .await;
 
     Ok(Json(json!({
         "id": id,
@@ -145,13 +155,8 @@ pub async fn get_handler(
         );
     }
 
-    let (row, data) = super::get_secret_with_fallback(
-        &state,
-        auth.user_id(),
-        &category,
-        &name,
-    )
-    .await?;
+    let (row, data) =
+        super::get_secret_with_fallback(&state, auth.user_id(), &category, &name).await?;
 
     log_audit(
         &state.db,
@@ -211,7 +216,14 @@ pub async fn update_handler(
 
     // Sync to Kleos v3: delete old + store new (non-fatal)
     kleos_sync::delete_from_kleos(&state, &category, &name).await;
-    kleos_sync::store_to_kleos(&state, &category, &name, &body.data, state.master_key.as_ref()).await;
+    kleos_sync::store_to_kleos(
+        &state,
+        &category,
+        &name,
+        &body.data,
+        state.master_key.as_ref(),
+    )
+    .await;
 
     Ok(Json(json!({
         "category": category,
@@ -265,7 +277,6 @@ pub async fn sync_handler(
     Auth(auth): Auth,
     State(state): State<AppState>,
 ) -> Result<Json<Value>, AppError> {
-
     let entries = kleos_sync::fetch_v3_entries(&state)
         .await
         .map_err(|e| CredError::InvalidInput(e))?;

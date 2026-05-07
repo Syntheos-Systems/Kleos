@@ -32,14 +32,20 @@ struct MemoryRow {
     content: String,
 }
 
-
 fn kleos_url() -> Result<String, String> {
     std::env::var("KLEOS_URL")
         .or_else(|_| std::env::var("ENGRAM_URL"))
         .map_err(|_| "KLEOS_URL not set".to_string())
 }
 
-fn apply_auth(state: &AppState, req: reqwest::RequestBuilder, method: &str, path: &str, query: &str, body: &[u8]) -> reqwest::RequestBuilder {
+fn apply_auth(
+    state: &AppState,
+    req: reqwest::RequestBuilder,
+    method: &str,
+    path: &str,
+    query: &str,
+    body: &[u8],
+) -> reqwest::RequestBuilder {
     if let Some(signer) = &state.kleos_signer {
         if let Some(session) = signer.cached_session() {
             return req.header("X-Kleos-Session", session);
@@ -74,17 +80,32 @@ pub(crate) async fn fetch_v3_entries(state: &AppState) -> Result<Vec<KleosV3Entr
     let url = format!("{}/list", base.trim_end_matches('/'));
 
     let http = Client::new();
-    let req = http.get(&url).query(&[("category", "credential"), ("limit", "500")]);
-    let req = apply_auth(state, req, "GET", "/list", "category=credential&limit=500", &[]);
+    let req = http
+        .get(&url)
+        .query(&[("category", "credential"), ("limit", "500")]);
+    let req = apply_auth(
+        state,
+        req,
+        "GET",
+        "/list",
+        "category=credential&limit=500",
+        &[],
+    );
 
-    let resp = req.send().await.map_err(|e| format!("kleos unreachable: {}", e))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("kleos unreachable: {}", e))?;
     capture_session(state, &resp);
 
     if !resp.status().is_success() {
         return Err(format!("kleos /list returned {}", resp.status()));
     }
 
-    let list: ListResponse = resp.json().await.map_err(|e| format!("parse error: {}", e))?;
+    let list: ListResponse = resp
+        .json()
+        .await
+        .map_err(|e| format!("parse error: {}", e))?;
 
     let mut entries = Vec::new();
     for row in list.results {
@@ -150,7 +171,10 @@ async fn store_to_kleos_inner(
     let req = http.post(&url).json(&body);
     let req = apply_auth(state, req, "POST", "/store", "", &body_bytes);
 
-    let resp = req.send().await.map_err(|e| format!("kleos unreachable: {}", e))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("kleos unreachable: {}", e))?;
     capture_session(state, &resp);
 
     if !resp.status().is_success() {
@@ -168,9 +192,15 @@ pub(crate) async fn delete_from_kleos(state: &AppState, category: &str, name: &s
     }
 }
 
-async fn delete_from_kleos_inner(state: &AppState, category: &str, name: &str) -> Result<(), String> {
+async fn delete_from_kleos_inner(
+    state: &AppState,
+    category: &str,
+    name: &str,
+) -> Result<(), String> {
     let entries = fetch_v3_entries(state).await?;
-    let target = entries.iter().find(|e| e.category == category && e.name == name);
+    let target = entries
+        .iter()
+        .find(|e| e.category == category && e.name == name);
 
     let entry = match target {
         Some(e) => e,
@@ -185,19 +215,32 @@ async fn delete_from_kleos_inner(state: &AppState, category: &str, name: &str) -
     let path = format!("/memory/{}", entry.id);
     let req = apply_auth(state, req, "DELETE", &path, "", &[]);
 
-    let resp = req.send().await.map_err(|e| format!("kleos unreachable: {}", e))?;
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("kleos unreachable: {}", e))?;
     capture_session(state, &resp);
 
     if !resp.status().is_success() {
-        return Err(format!("kleos DELETE /memory/{} returned {}", entry.id, resp.status()));
+        return Err(format!(
+            "kleos DELETE /memory/{} returned {}",
+            entry.id,
+            resp.status()
+        ));
     }
 
-    debug!("deleted {}/{} (id={}) from Kleos v3", category, name, entry.id);
+    debug!(
+        "deleted {}/{} (id={}) from Kleos v3",
+        category, name, entry.id
+    );
     Ok(())
 }
 
 /// Decrypt a v3 hex blob into SecretData.
-pub(crate) fn decrypt_v3_entry(hex_data: &str, master_key: &[u8; KEY_SIZE]) -> Result<SecretData, String> {
+pub(crate) fn decrypt_v3_entry(
+    hex_data: &str,
+    master_key: &[u8; KEY_SIZE],
+) -> Result<SecretData, String> {
     let ciphertext = hex::decode(hex_data).map_err(|e| format!("hex decode: {}", e))?;
     let plaintext = decrypt(master_key, &ciphertext).map_err(|e| format!("decrypt: {}", e))?;
     serde_json::from_slice(&plaintext).map_err(|e| format!("json parse: {}", e))

@@ -31,9 +31,7 @@ async fn get_db(state: &AppState) -> Result<HandoffsDb, AppError> {
             let handle = registry
                 .get_or_create(HANDOFFS_TENANT_ID)
                 .await
-                .map_err(|e| {
-                    AppError(EngError::Internal(format!("handoffs tenant load: {e}")))
-                })?;
+                .map_err(|e| AppError(EngError::Internal(format!("handoffs tenant load: {e}"))))?;
             Ok(HandoffsDb::new(
                 handle.database(),
                 state.handoffs_gc_sem.clone(),

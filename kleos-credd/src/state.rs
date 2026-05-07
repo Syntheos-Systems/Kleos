@@ -196,7 +196,9 @@ fn init_kleos_signer() -> Option<Arc<RequestSigner>> {
             Some(Arc::new(signer))
         }
         Ok(None) => {
-            tracing::warn!("no PIV/software key found; Kleos vault fallback will use bootstrap bearer");
+            tracing::warn!(
+                "no PIV/software key found; Kleos vault fallback will use bootstrap bearer"
+            );
             None
         }
         Err(e) => {

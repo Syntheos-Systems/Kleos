@@ -8,7 +8,10 @@ use tokio::sync::Mutex;
 
 /// Build the session file path from project and session_id
 fn session_file_path(config: &Config, project: &str, session_id: &str) -> PathBuf {
-    config.watch_dir.join(project).join(format!("{}.jsonl", session_id))
+    config
+        .watch_dir
+        .join(project)
+        .join(format!("{}.jsonl", session_id))
 }
 
 /// Extract a condensed transcript from the JSONL file.
@@ -47,7 +50,10 @@ fn extract_transcript(path: &PathBuf) -> Option<String> {
             }
             "assistant" => {
                 // Extract text blocks from assistant content array
-                if let Some(blocks) = parsed.pointer("/message/content").and_then(|c| c.as_array()) {
+                if let Some(blocks) = parsed
+                    .pointer("/message/content")
+                    .and_then(|c| c.as_array())
+                {
                     for block in blocks {
                         if block.get("type").and_then(|t| t.as_str()) == Some("text") {
                             if let Some(text) = block.get("text").and_then(|t| t.as_str()) {

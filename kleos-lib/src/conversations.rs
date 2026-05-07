@@ -398,7 +398,9 @@ pub async fn add_message(
         })
         .await?;
     // Touch the conversation updated_at (scoped by user_id).
-    if let Err(e) = touch_conversation(db, conversation_id, user_id).await { tracing::warn!(error = %e, conversation_id, "failed to touch conversation timestamp"); }
+    if let Err(e) = touch_conversation(db, conversation_id, user_id).await {
+        tracing::warn!(error = %e, conversation_id, "failed to touch conversation timestamp");
+    }
     let qualified_cols = MESSAGE_COLUMNS
         .split(", ")
         .map(|c| format!("m.{}", c))
@@ -599,7 +601,9 @@ pub async fn upsert_conversation(
             )
             .await?;
         }
-        if let Err(e) = touch_conversation(db, conv.id, user_id).await { tracing::warn!(error = %e, conversation_id = conv.id, "failed to touch conversation timestamp"); }
+        if let Err(e) = touch_conversation(db, conv.id, user_id).await {
+            tracing::warn!(error = %e, conversation_id = conv.id, "failed to touch conversation timestamp");
+        }
     }
     get_conversation_for_user(db, conv.id, user_id).await
 }

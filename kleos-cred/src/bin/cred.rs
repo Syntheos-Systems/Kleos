@@ -686,7 +686,18 @@ async fn main() -> Result<()> {
                     field,
                     raw,
                     hash,
-                } => cmd_get(&db, &key, &service, &secret_key, field.as_deref(), raw, hash.as_deref()).await,
+                } => {
+                    cmd_get(
+                        &db,
+                        &key,
+                        &service,
+                        &secret_key,
+                        field.as_deref(),
+                        raw,
+                        hash.as_deref(),
+                    )
+                    .await
+                }
                 Commands::List { service } => cmd_list(&db, &key, service.as_deref()).await,
                 Commands::Delete {
                     service,

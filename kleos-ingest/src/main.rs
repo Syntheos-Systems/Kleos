@@ -44,8 +44,7 @@ async fn main() {
         "kleos-ingest starting"
     );
 
-    let ledger = ledger::Ledger::open(&config.ledger_path)
-        .expect("failed to open ledger database");
+    let ledger = ledger::Ledger::open(&config.ledger_path).expect("failed to open ledger database");
     let writer = writer::KleosWriter::new(&config);
 
     watcher::run(config, ledger, writer).await;

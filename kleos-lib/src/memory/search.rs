@@ -892,7 +892,14 @@ pub async fn hybrid_search(db: &Database, req: SearchRequest) -> Result<Arc<Vec<
         let recency = scoring::recency_score(&c.created_at);
         let recency_boost = 1.0 + recency * scoring::RECENCY_WEIGHT;
 
-        c.score = rrf * decay_factor * src_boost * stat_boost * temp_boost * pr_boost * contr * recency_boost;
+        c.score = rrf
+            * decay_factor
+            * src_boost
+            * stat_boost
+            * temp_boost
+            * pr_boost
+            * contr
+            * recency_boost;
         c.combined_score = c.score;
 
         let r3 = |v: f64| (v * 1000.0).round() / 1000.0;

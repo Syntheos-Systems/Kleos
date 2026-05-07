@@ -1646,11 +1646,10 @@ async fn handle_skill_command(client: &Client, cmd: &SkillCommands) {
             agent,
             language,
         } => {
-            let code = std::fs::read_to_string(&file)
-                .unwrap_or_else(|e| {
-                    eprintln!("Error reading {}: {}", file, e);
-                    std::process::exit(1);
-                });
+            let code = std::fs::read_to_string(&file).unwrap_or_else(|e| {
+                eprintln!("Error reading {}: {}", file, e);
+                std::process::exit(1);
+            });
             let body = json!({
                 "name": name,
                 "agent": agent,
@@ -1902,11 +1901,13 @@ async fn handle_cred_command(client: &Client, cmd: &CredCommands) {
                         println!("No secrets.");
                     } else {
                         for s in &secrets {
-                            let cat = s.get("service")
+                            let cat = s
+                                .get("service")
                                 .or_else(|| s.get("category"))
                                 .and_then(|x| x.as_str())
                                 .unwrap_or("?");
-                            let name = s.get("key")
+                            let name = s
+                                .get("key")
                                 .or_else(|| s.get("name"))
                                 .and_then(|x| x.as_str())
                                 .unwrap_or("?");
