@@ -71,6 +71,7 @@ impl TestApp {
                 TenantConfig::default(),
                 config.vector_dimensions,
                 false,
+                None,
             )
             .expect("tenant registry"),
         );

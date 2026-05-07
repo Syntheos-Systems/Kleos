@@ -37,7 +37,7 @@ kleos/
   kleos-cred/           Credential management library
   kleos-credd/          Credential management daemon
   kleos-approval-tui/   Approval workflow TUI (WIP)
-  kleos-migrate/        libsql -> rusqlite ETL tool
+  kleos-migrate/        Monolith-to-tenant shard ETL tool
   agent-forge/          Structured reasoning CLI
   sdk/                  Client SDKs (TypeScript)
   hooks/                Claude Code hook scripts
@@ -137,19 +137,15 @@ async fn test_search_returns_recent_memories_first() {
 | `kleos-mcp` | `http` | off | HTTP transport (default is stdio only) |
 | `kleos-cred` | `gui` | off | eframe-based credential manager GUI |
 
-`sqlcipher` and `bundled-sqlite` are mutually exclusive with `libsql` in the same binary (symbol collision). This is why `kleos-migrate` cannot enable `sqlcipher`.
-
 ## Migration Tool
 
-`kleos-migrate` is a one-shot ETL utility for migrating data from the old libsql-backed database to the current rusqlite + LanceDB backend. It reads the source database, transforms records, and writes them to the new format. Run it once during migration -- it is not part of normal operation.
+`kleos-migrate` copies data from an encrypted SQLCipher monolith database into a per-tenant shard. It filters rows by `--filter-user-id` and writes them to a new tenant directory with `kleos.db` and LanceDB vector index. One-shot utility, not part of normal operation.
 
 ```bash
-cargo run -p kleos-migrate -- --source old-engram.db --target /data/kleos
+cargo run -p kleos-migrate -- --source system.db --target /data/tenants/1 --filter-user-id 1
 ```
 
-The `--target` is a directory - rusqlite database and LanceDB index are created inside it. Use `--dry-run` to preview table counts and schema diffs without writing. Use `--skip-vectors` to copy relational data only.
-
-Note: `kleos-migrate` has a linker conflict between libsqlite3-sys and libsql-ffi. It must be built separately and cannot share a binary with the server.
+Use `--dry-run` to preview per-table counts without writing. Use `--handoffs-source` to migrate a legacy handoffs database into the target shard.
 
 ## Questions?
 

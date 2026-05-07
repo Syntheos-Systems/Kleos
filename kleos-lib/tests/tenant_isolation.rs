@@ -25,6 +25,7 @@ async fn two_tenants() -> (Arc<TenantHandle>, Arc<TenantHandle>) {
         TenantConfig::default(),
         128, // minimal vector dimensions for tests
         false,
+        None,
     )
     .expect("registry");
 
