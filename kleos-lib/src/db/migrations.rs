@@ -489,6 +489,13 @@ pub static MIGRATIONS: &[Migration] = &[
         down: Some(down_migration_tool_manifests),
         transactional: true,
     },
+    Migration {
+        version: 55,
+        description: "handoffs_global",
+        up: run_migration_handoffs_global,
+        down: Some(down_migration_handoffs_global),
+        transactional: true,
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -549,6 +556,7 @@ const MIGRATION_MEMORY_CHUNKS: i64 = 51;
 const MIGRATION_ACTIVITY_LOG_TABLE: i64 = 52;
 const MIGRATION_IDENTITY_KEYS_SCOPES: i64 = 53;
 const MIGRATION_TOOL_MANIFESTS: i64 = 54;
+const MIGRATION_HANDOFFS_GLOBAL: i64 = 55;
 
 // ---------------------------------------------------------------------------
 // Up path (unchanged behavior)
@@ -977,6 +985,12 @@ pub fn run_migrations(conn: &rusqlite::Connection) -> Result<()> {
         info!("Running migration 54: tool_manifests");
         run_migration_tool_manifests(conn)?;
         record_migration(conn, MIGRATION_TOOL_MANIFESTS, "tool_manifests")?;
+    }
+
+    if current_version < MIGRATION_HANDOFFS_GLOBAL {
+        info!("Running migration 55: handoffs_global");
+        run_migration_handoffs_global(conn)?;
+        record_migration(conn, MIGRATION_HANDOFFS_GLOBAL, "handoffs_global")?;
     }
 
     Ok(())
@@ -3564,6 +3578,63 @@ fn down_migration_tool_manifests(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "DROP INDEX IF EXISTS idx_tool_manifests_agent;
          DROP TABLE IF EXISTS tool_manifests;",
+    )
+    .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+    Ok(())
+}
+
+fn run_migration_handoffs_global(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS handoffs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'utc')),
+            project TEXT NOT NULL,
+            branch TEXT,
+            directory TEXT,
+            agent TEXT DEFAULT 'unknown',
+            type TEXT DEFAULT 'manual',
+            content TEXT NOT NULL,
+            metadata TEXT,
+            session_id TEXT,
+            model TEXT,
+            host TEXT,
+            content_hash TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_handoffs_project ON handoffs(project, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_handoffs_created ON handoffs(created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_handoffs_hash ON handoffs(content_hash);
+        CREATE INDEX IF NOT EXISTS idx_handoffs_agent ON handoffs(agent, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_handoffs_type ON handoffs(type, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_handoffs_session ON handoffs(session_id);
+        CREATE INDEX IF NOT EXISTS idx_handoffs_model ON handoffs(model, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_handoffs_restore ON handoffs(project, type, agent, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_handoffs_user_created ON handoffs(user_id, created_at DESC);
+        CREATE VIRTUAL TABLE IF NOT EXISTS handoffs_fts USING fts5(
+            content, content='handoffs', content_rowid='id'
+        );
+        CREATE TRIGGER IF NOT EXISTS handoffs_fts_ai AFTER INSERT ON handoffs BEGIN
+            INSERT INTO handoffs_fts(rowid, content) VALUES (new.id, new.content);
+        END;
+        CREATE TRIGGER IF NOT EXISTS handoffs_fts_ad AFTER DELETE ON handoffs BEGIN
+            INSERT INTO handoffs_fts(handoffs_fts, rowid, content) VALUES('delete', old.id, old.content);
+        END;
+        CREATE TRIGGER IF NOT EXISTS handoffs_fts_au AFTER UPDATE OF content ON handoffs BEGIN
+            INSERT INTO handoffs_fts(handoffs_fts, rowid, content) VALUES('delete', old.id, old.content);
+            INSERT INTO handoffs_fts(rowid, content) VALUES (new.id, new.content);
+        END;",
+    )
+    .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+    Ok(())
+}
+
+fn down_migration_handoffs_global(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(
+        "DROP TRIGGER IF EXISTS handoffs_fts_au;
+         DROP TRIGGER IF EXISTS handoffs_fts_ad;
+         DROP TRIGGER IF EXISTS handoffs_fts_ai;
+         DROP TABLE IF EXISTS handoffs_fts;
+         DROP TABLE IF EXISTS handoffs;",
     )
     .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
     Ok(())
