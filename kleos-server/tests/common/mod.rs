@@ -107,6 +107,7 @@ pub async fn test_app_with_sharding() -> (Router, AppState, TempDir) {
         TenantConfig::default(),
         config.vector_dimensions,
         false,
+        None,
     )
     .expect("tenant registry");
 

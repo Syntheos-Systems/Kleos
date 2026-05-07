@@ -20,6 +20,7 @@ pub async fn open(target_dir: &Path) -> Result<TargetDb> {
             .to_str()
             .ok_or_else(|| anyhow!("target path is not valid UTF-8"))?,
         None,
+        None,
     )
     .await
     .map_err(|e| anyhow!("open tenant db: {e}"))?;

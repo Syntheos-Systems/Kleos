@@ -141,13 +141,14 @@ impl Database {
     pub async fn open_tenant(
         db_path: &str,
         vector_index: Option<Arc<dyn VectorIndex>>,
+        encryption_key: Option<[u8; 32]>,
     ) -> Result<Self> {
         let pool_config = DbPoolConfig {
             max_readers: 2,
             writer_count: 1,
             ..DbPoolConfig::default()
         };
-        let pools = DatabasePools::new(db_path, pool_config, None).await?;
+        let pools = DatabasePools::new(db_path, pool_config, encryption_key).await?;
 
         let writer = pools.writer().get().await.map_err(|e| {
             EngError::DatabaseMessage(format!(
@@ -160,6 +161,13 @@ impl Database {
             .map_err(|e| {
                 EngError::DatabaseMessage(format!("tenant pool migration failed: {e}"))
             })??;
+
+        let encrypted_label = if encryption_key.is_some() {
+            " (encrypted)"
+        } else {
+            ""
+        };
+        info!("tenant database connected: {}{}", db_path, encrypted_label);
 
         Ok(Self {
             db_path: db_path.to_string(),
