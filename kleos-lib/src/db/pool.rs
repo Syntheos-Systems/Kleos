@@ -43,13 +43,19 @@ impl DatabasePools {
             return Ok(pools);
         }
 
-        // Raw hex key failed on a file-backed encrypted DB. The file may
-        // have been encrypted with the legacy passphrase method (rusqlite
-        // pragma_update quoted the x'...' hex literal). Open a direct
-        // connection with the legacy passphrase, PRAGMA rekey to raw hex,
-        // then rebuild pools with the corrected file.
         let key = encryption_key.unwrap();
-        migrate_legacy_passphrase_to_raw_hex(db_path, &key)?;
+
+        // Try legacy passphrase rekey first (pre-fix databases).
+        if migrate_legacy_passphrase_to_raw_hex(db_path, &key).is_ok() {
+            tracing::info!(db = db_path, "legacy passphrase rekey succeeded");
+        } else if migrate_plaintext_to_encrypted(db_path, &key).is_ok() {
+            tracing::info!(db = db_path, "plaintext-to-encrypted migration succeeded");
+        } else {
+            return Err(EngError::Internal(format!(
+                "database {db_path} could not be opened: raw hex key, legacy passphrase, \
+                 and plaintext migration all failed"
+            )));
+        }
 
         let reader = build_pool(db_path, config.max_readers, config, encryption_key)?;
         let writer = build_pool(db_path, config.writer_count.max(1), config, encryption_key)?;
@@ -317,6 +323,82 @@ fn migrate_legacy_passphrase_to_raw_hex(
     tracing::warn!(
         db = db_path,
         "migrated encryption from legacy passphrase to raw hex key"
+    );
+
+    Ok(())
+}
+
+/// Encrypt a plaintext SQLite database in place.
+///
+/// Pre-deploy tenant databases may be unencrypted. This opens the file
+/// without a key, ATTACHes a new encrypted copy, uses sqlcipher_export
+/// to copy all data, then atomically swaps the files.
+fn migrate_plaintext_to_encrypted(
+    db_path: &str,
+    key: &[u8; crate::encryption::KEY_SIZE],
+) -> Result<()> {
+    use zeroize::Zeroize;
+
+    let conn = deadpool_sqlite::rusqlite::Connection::open(db_path).map_err(|e| {
+        EngError::DatabaseMessage(format!("failed to open {db_path} for plaintext check: {e}"))
+    })?;
+
+    // Verify it's actually a readable plaintext DB.
+    conn.pragma_query_value(None, "schema_version", |_| Ok(()))
+        .map_err(|e| {
+            EngError::DatabaseMessage(format!(
+                "{db_path} is not a readable plaintext database: {e}"
+            ))
+        })?;
+
+    let encrypted_path = format!("{db_path}.encrypting");
+    let _ = std::fs::remove_file(&encrypted_path);
+
+    let raw_key_pragma = crate::encryption::format_pragma_key(key);
+    let mut attach_sql = format!(
+        "ATTACH DATABASE '{}' AS encrypted KEY {};",
+        encrypted_path.replace('\'', "''"),
+        &raw_key_pragma
+    );
+    conn.execute_batch(&attach_sql).map_err(|e| {
+        EngError::DatabaseMessage(format!("ATTACH encrypted DB failed on {db_path}: {e}"))
+    })?;
+    attach_sql.zeroize();
+
+    conn.execute_batch("SELECT sqlcipher_export('encrypted');")
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&encrypted_path);
+            EngError::DatabaseMessage(format!("sqlcipher_export failed on {db_path}: {e}"))
+        })?;
+
+    conn.execute_batch("DETACH DATABASE encrypted;")
+        .map_err(|e| {
+            EngError::DatabaseMessage(format!("DETACH failed on {db_path}: {e}"))
+        })?;
+    drop(conn);
+
+    // Backup the plaintext file, then atomic swap.
+    let backup_path = format!("{db_path}.plaintext-backup");
+    std::fs::rename(db_path, &backup_path).map_err(|e| {
+        EngError::DatabaseMessage(format!(
+            "failed to rename {db_path} -> {backup_path}: {e}"
+        ))
+    })?;
+    std::fs::rename(&encrypted_path, db_path).map_err(|e| {
+        let _ = std::fs::rename(&backup_path, db_path);
+        EngError::DatabaseMessage(format!(
+            "failed to rename {encrypted_path} -> {db_path}: {e}"
+        ))
+    })?;
+
+    // Clean up WAL/SHM from the old plaintext DB.
+    let _ = std::fs::remove_file(format!("{db_path}-wal"));
+    let _ = std::fs::remove_file(format!("{db_path}-shm"));
+
+    tracing::warn!(
+        db = db_path,
+        backup = backup_path,
+        "migrated plaintext database to encrypted (backup preserved)"
     );
 
     Ok(())
