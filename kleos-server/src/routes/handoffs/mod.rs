@@ -22,25 +22,31 @@ pub fn router() -> Router<AppState> {
         .route("/handoffs/{id}", delete(delete_handoff))
 }
 
-/// Resolve the reserved "handoffs" tenant shard and wrap it in a `HandoffsDb`
-/// facade. Fails closed when tenant sharding is disabled, mirroring
-/// `ResolvedDb`'s behavior for non-system users.
+/// Resolve the handoffs database: uses the reserved "handoffs" tenant shard
+/// when tenant sharding is enabled, falls back to the global database
+/// (which gets the handoffs table via migration v55) otherwise.
 async fn get_db(state: &AppState) -> Result<HandoffsDb, AppError> {
-    let registry = state.tenant_registry.as_ref().ok_or_else(|| {
-        AppError(EngError::NotImplemented(
-            "handoffs subsystem requires tenant sharding (ENGRAM_TENANT_SHARDING)".to_string(),
-        ))
-    })?;
-    let handle = registry
-        .get_or_create(HANDOFFS_TENANT_ID)
-        .await
-        .map_err(|e| AppError(EngError::Internal(format!("handoffs tenant load: {e}"))))?;
-    Ok(HandoffsDb::new(
-        handle.database(),
-        state.handoffs_gc_sem.clone(),
-    ))
+    match state.tenant_registry.as_ref() {
+        Some(registry) => {
+            let handle = registry
+                .get_or_create(HANDOFFS_TENANT_ID)
+                .await
+                .map_err(|e| {
+                    AppError(EngError::Internal(format!("handoffs tenant load: {e}")))
+                })?;
+            Ok(HandoffsDb::new(
+                handle.database(),
+                state.handoffs_gc_sem.clone(),
+            ))
+        }
+        None => Ok(HandoffsDb::new(
+            state.db.clone(),
+            state.handoffs_gc_sem.clone(),
+        )),
+    }
 }
 
+#[tracing::instrument(skip_all)]
 async fn store_handoff(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -54,6 +60,7 @@ async fn store_handoff(
     ))
 }
 
+#[tracing::instrument(skip_all)]
 async fn list_handoffs(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -65,6 +72,7 @@ async fn list_handoffs(
     Ok(Json(json!({ "handoffs": handoffs, "count": count })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn get_latest(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -89,6 +97,7 @@ fn default_limit() -> usize {
     10
 }
 
+#[tracing::instrument(skip_all)]
 async fn search_handoffs(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -107,6 +116,7 @@ async fn search_handoffs(
     Ok(Json(json!({ "results": results, "count": count })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn get_stats(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -123,6 +133,7 @@ struct GcParams {
     keep: Option<i64>,
 }
 
+#[tracing::instrument(skip_all)]
 async fn run_gc(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -139,6 +150,7 @@ async fn run_gc(
     ))
 }
 
+#[tracing::instrument(skip_all)]
 async fn delete_handoff(
     State(state): State<AppState>,
     Auth(auth): Auth,
