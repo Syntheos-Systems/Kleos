@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 mod db;
 mod json_io;
+mod kleos_client;
 mod tools;
 mod treesitter;
 
@@ -45,8 +46,18 @@ enum Commands {
     SessionDiff,
     Think,
     DeclareUnknowns,
+    UpdateSpec,
+    ListSpecs,
+    GetSpec,
+    Stats,
     RepoMap,
     SearchCode,
+    SkillSearch,
+    SkillCapture,
+    SkillRecordExec,
+    SkillFix,
+    SkillDerive,
+    SkillLineage,
 }
 
 fn expand_path(path: &str) -> PathBuf {
@@ -138,6 +149,15 @@ fn main() {
                     tools::approaches::consider_approaches(&db, input).map_err(|e| e.to_string())
                 })
         }
+        Commands::UpdateSpec => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::spec::update_spec(&db, input).map_err(|e| e.to_string())),
+        Commands::ListSpecs => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::spec::list_specs(&db, input).map_err(|e| e.to_string())),
+        Commands::GetSpec => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::spec::get_spec(&db, input).map_err(|e| e.to_string())),
         Commands::RepoMap => read_input(&cli.input)
             .map_err(|e| e.to_string())
             .and_then(|input| {
@@ -150,6 +170,27 @@ fn main() {
                     tools::ast::search::search_code(&db, input).map_err(|e| e.to_string())
                 })
         }
+        Commands::SkillSearch => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::skills::skill_search(input).map_err(|e| e.to_string())),
+        Commands::SkillCapture => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::skills::skill_capture(input).map_err(|e| e.to_string())),
+        Commands::SkillRecordExec => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::skills::skill_record_exec(input).map_err(|e| e.to_string())),
+        Commands::SkillFix => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::skills::skill_fix(input).map_err(|e| e.to_string())),
+        Commands::SkillDerive => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::skills::skill_derive(input).map_err(|e| e.to_string())),
+        Commands::SkillLineage => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::skills::skill_lineage(input).map_err(|e| e.to_string())),
+        Commands::Stats => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::stats::stats(&db, input).map_err(|e| e.to_string())),
     };
 
     let output = match result {

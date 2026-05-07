@@ -584,8 +584,18 @@ Use before:
 
 #### `agent-forge consider-approaches`
 
-- Stub only.
-- Currently returns `Not yet implemented`.
+Required input:
+
+- `problem`
+- `approaches`: array of 2+ items, each with `name`, `description`, optional `pros`, `cons`, `score`
+- optional `spec_id` (links to existing spec)
+- optional `chosen_index` (which approach was selected)
+
+What it does:
+
+- Records evaluated approaches in the forge database.
+- If `chosen_index` is set, marks that approach as chosen.
+- Returns a comparison prompt for the agent to reason through.
 
 #### `agent-forge log-hypothesis`
 
@@ -594,10 +604,12 @@ Required input:
 - `bug_description`
 - `hypothesis`
 - optional `confidence` from `0.0` to `1.0`
+- optional `spec_id` (links hypothesis to a spec)
 
 What it does:
 
 - Records a debugging hypothesis.
+- If `spec_id` is set, the hypothesis appears in `get-spec` output.
 
 #### `agent-forge log-outcome`
 
@@ -623,19 +635,31 @@ What it does:
 
 #### `agent-forge verify`
 
-Required input:
+Required input (one of):
 
-- `command`
-- optional `expected_exit_code`, default `0`
+- `command` -- single command to run
+- `steps` -- array of `{command, expected_exit_code?, label?}` for multi-step verification
+- Both may be provided; `command` runs first, then `steps`
+
+Optional:
+
+- `expected_exit_code`, default `0` (for single `command`)
+- `timeout_secs` -- kill the process if it exceeds this duration
+- `spec_id` -- link verification results to a spec (records to `verifications` table)
+- `criteria_index` -- which acceptance criterion this verification covers
+- `skill_id` -- record pass/fail to Kleos skill execution tracking
 
 What it does:
 
-- Executes the command without a shell.
-- Returns exit code, stdout, and stderr.
+- Executes each step without a shell (SEC-C1).
+- Tracks duration_ms per step.
+- Records results to the `verifications` table when `spec_id` is provided.
+- Returns per-step results with exit code, stdout, stderr, duration.
 
 Use after:
 
 - Code changes or repair attempts.
+- Multi-step: run tests AND check types AND lint in one call.
 
 #### `agent-forge challenge-code`
 
@@ -682,10 +706,14 @@ Optional:
 
 - `context`
 - `tags`
+- `spec_id` (links learning to a spec)
+- `capture_as_skill` (boolean) -- if true, also captures the discovery as a Kleos skill
 
 What it does:
 
 - Stores a session learning note in the forge database.
+- If `spec_id` is set, the learning appears in `get-spec` output.
+- If `capture_as_skill` is true and Kleos is reachable, creates a skill from the discovery.
 
 #### `agent-forge session-recall`
 
@@ -769,6 +797,162 @@ What it does:
 
 - Searches symbol names across supported source files.
 - Returns file, line, column, symbol kind, and line context.
+
+### Spec lifecycle commands
+
+#### `agent-forge update-spec`
+
+Required input:
+
+- `spec_id`
+- `status` in `active`, `completed`, `failed`, `blocked`
+
+Optional:
+
+- `note` -- reason for the status change
+
+What it does:
+
+- Updates the spec status. Sets `completed_at` timestamp for `completed` and `failed`.
+
+Use when:
+
+- A task is done, abandoned, or blocked. Closes the protocol loop.
+
+#### `agent-forge list-specs`
+
+Optional input:
+
+- `status` -- filter by status
+- `limit` -- max results, default 20
+
+What it does:
+
+- Lists specs with id, description, type, status, timestamps.
+
+#### `agent-forge get-spec`
+
+Required input:
+
+- `spec_id`
+
+What it does:
+
+- Returns the full spec plus all related hypotheses, approaches, learnings, and verifications.
+- This is the cross-reference view -- everything linked to a single task.
+
+### Stats command
+
+#### `agent-forge stats`
+
+Optional input:
+
+- `days` -- look-back window, default 30
+
+What it does:
+
+- Queries across all tables and returns a protocol health dashboard:
+  - Spec completion rate (completed/total)
+  - Hypothesis accuracy (correct/resolved)
+  - Verification pass rate (passed/total)
+  - Average hypothesis confidence
+  - Average verification duration
+  - Top error patterns (most common bug descriptions)
+  - Task type distribution
+  - Learning, approach, and checkpoint counts
+
+### Skill integration commands
+
+These commands connect agent-forge to the Kleos skill evolution system.
+They require a running Kleos server (`KLEOS_URL` and `KLEOS_API_KEY` env vars).
+
+#### `agent-forge skill-search`
+
+Required input:
+
+- `query`
+
+Optional:
+
+- `limit`
+
+What it does:
+
+- Searches Kleos skills by keyword/semantic query.
+- Use before `spec-task` to find relevant existing skills.
+
+#### `agent-forge skill-capture`
+
+Required input:
+
+- `description` (max 2000 chars)
+
+Optional:
+
+- `agent`
+
+What it does:
+
+- Creates a new Kleos skill from a freeform workflow description.
+- The Kleos LLM generates name, description, and reusable code.
+
+#### `agent-forge skill-record-exec`
+
+Required input:
+
+- `skill_id`
+- `success` (boolean)
+
+Optional:
+
+- `duration_ms`
+- `error_type`
+- `error_message`
+
+What it does:
+
+- Records an execution result against a Kleos skill.
+- Builds trust scores over time.
+
+#### `agent-forge skill-fix`
+
+Required input:
+
+- `skill_id`
+
+Optional:
+
+- `hint`
+
+What it does:
+
+- Triggers fix evolution on a failing skill.
+- The Kleos LLM analyzes recent failures and generates a fixed version.
+
+#### `agent-forge skill-derive`
+
+Required input:
+
+- `parent_ids` (array of skill IDs, at least one)
+- `direction` (max 2000 chars)
+
+Optional:
+
+- `agent`
+
+What it does:
+
+- Combines parent skills into a new derived skill guided by the direction hint.
+
+#### `agent-forge skill-lineage`
+
+Required input:
+
+- `skill_id`
+
+What it does:
+
+- Returns the evolution chain (parent IDs) for a skill.
 
 ## `cred`
 
@@ -972,12 +1156,16 @@ For day-to-day agent work, default to this sequence:
 
 1. `kleos-cli search` or `kleos-cli context` before asking a human.
 2. `agent-forge spec-task` before non-trivial code changes.
-3. `kr` to read code and `kw` only for bounded direct writes.
-4. `ke` before an edit path that is supposed to be spec-gated.
-5. `kleos-sh` or provider hook integration for shell actions that must go
+3. `agent-forge consider-approaches` when multiple paths exist.
+4. `kr` to read code and `kw` only for bounded direct writes.
+5. `ke` before an edit path that is supposed to be spec-gated.
+6. `kleos-sh` or provider hook integration for shell actions that must go
    through the gate.
-6. `agent-forge verify` after code changes.
-7. `kleos-cli store` or `kleos-cli handoff dump/mechanical` at task boundaries.
+7. `agent-forge verify` after code changes (use `steps` for multi-step).
+8. `agent-forge update-spec` to mark the spec completed/failed/blocked.
+9. `agent-forge session-learn` for reusable discoveries (with `capture_as_skill: true` when appropriate).
+10. `kleos-cli store` or `kleos-cli handoff dump/mechanical` at task boundaries.
+11. `agent-forge stats` periodically to review protocol health.
 
 ## Rule of precedence
 
