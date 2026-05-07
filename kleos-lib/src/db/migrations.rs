@@ -6,6 +6,16 @@ use serde::Serialize;
 use tracing::info;
 
 // ---------------------------------------------------------------------------
+// IMPORTANT: version numbers in this file are scoped to the GLOBAL
+// schema_version chain. They are independent of versions of the same number
+// in `tenant_migrations.rs` (which has its own `schema_version` table inside
+// each tenant shard). Tenant v48 and global v48 do unrelated work; this is
+// intentional. When adding a new migration, increment within THIS file's
+// chain only and pair it with a corresponding entry in `tenant_migrations.rs`
+// only if the same logical change applies to per-tenant data.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Migration descriptor
 // ---------------------------------------------------------------------------
 
@@ -458,6 +468,20 @@ pub static MIGRATIONS: &[Migration] = &[
         down: Some(down_migration_memory_chunks),
         transactional: true,
     },
+    Migration {
+        version: 52,
+        description: "activity_log_table",
+        up: run_migration_activity_log_table,
+        down: Some(down_migration_activity_log_table),
+        transactional: true,
+    },
+    Migration {
+        version: 53,
+        description: "identity_keys_scopes",
+        up: run_migration_identity_keys_scopes,
+        down: Some(down_migration_identity_keys_scopes),
+        transactional: true,
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -515,6 +539,8 @@ const MIGRATION_DROP_API_KEYS_AGENT_FK: i64 = 48;
 const MIGRATION_SUPERVISOR_INJECTIONS: i64 = 49;
 const MIGRATION_GATE_REQUESTS_SESSION_ID: i64 = 50;
 const MIGRATION_MEMORY_CHUNKS: i64 = 51;
+const MIGRATION_ACTIVITY_LOG_TABLE: i64 = 52;
+const MIGRATION_IDENTITY_KEYS_SCOPES: i64 = 53;
 
 // ---------------------------------------------------------------------------
 // Up path (unchanged behavior)
@@ -925,6 +951,18 @@ pub fn run_migrations(conn: &rusqlite::Connection) -> Result<()> {
         info!("Running migration 51: memory_chunks");
         run_migration_memory_chunks(conn)?;
         record_migration(conn, MIGRATION_MEMORY_CHUNKS, "memory_chunks")?;
+    }
+
+    if current_version < MIGRATION_ACTIVITY_LOG_TABLE {
+        info!("Running migration 52: activity_log_table");
+        run_migration_activity_log_table(conn)?;
+        record_migration(conn, MIGRATION_ACTIVITY_LOG_TABLE, "activity_log_table")?;
+    }
+
+    if current_version < MIGRATION_IDENTITY_KEYS_SCOPES {
+        info!("Running migration 53: identity_keys_scopes");
+        run_migration_identity_keys_scopes(conn)?;
+        record_migration(conn, MIGRATION_IDENTITY_KEYS_SCOPES, "identity_keys_scopes")?;
     }
 
     Ok(())
@@ -3157,19 +3195,58 @@ fn run_migration_drop_api_keys_agent_fk(conn: &rusqlite::Connection) -> Result<(
     // In the sharded architecture agents live in per-tenant databases while
     // api_keys stays in the system DB. The FK `agent_id REFERENCES agents(id)`
     // cannot be satisfied cross-database, so we rebuild the table without it.
-    // Idempotent: if the FK is already absent, skip.
-    let has_fk: bool = conn
+    //
+    // SAFETY: This migration is `transactional: false` because it toggles
+    // `PRAGMA foreign_keys = OFF/ON`, which SQLite forbids inside a SAVEPOINT.
+    // To survive partial-failure restarts we detect three states up front:
+    //   1. api_keys with FK + no backup    -> full rebuild
+    //   2. api_keys without FK + no backup -> already migrated, no-op
+    //   3. backup exists                   -> previous run crashed mid-rebuild,
+    //      resume from CREATE TABLE.
+    let api_keys_sql: Option<String> = conn
         .query_row(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='api_keys'",
             [],
             |row| row.get::<_, String>(0),
         )
-        .map(|sql| sql.contains("REFERENCES agents"))
+        .ok();
+    let backup_exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='_api_keys_old_v46'",
+            [],
+            |row| row.get::<_, i64>(0).map(|c| c > 0),
+        )
         .unwrap_or(false);
 
-    if !has_fk {
-        info!("api_keys agent FK already absent, migration 48 is a no-op");
-        return Ok(());
+    if !backup_exists {
+        if let Some(sql) = &api_keys_sql {
+            if !sql.contains("REFERENCES agents") {
+                info!("api_keys agent FK already absent, migration 48 is a no-op");
+                return Ok(());
+            }
+        }
+    } else {
+        // Recovery: a previous run crashed somewhere in the rebuild block.
+        // Reset to the pre-migration state and let the rebuild run fresh.
+        if api_keys_sql.is_some() {
+            // Both tables exist -- crash happened after CREATE TABLE. The
+            // new api_keys may be partially populated (or fully but DROP
+            // didn't run). Backup is the source of truth: drop the new
+            // partial and restore from backup.
+            info!("Migration 48 resuming: both api_keys and _api_keys_old_v46 exist; restoring backup");
+            conn.execute_batch(
+                "DROP TABLE api_keys;
+                 ALTER TABLE _api_keys_old_v46 RENAME TO api_keys;",
+            )
+            .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+        } else {
+            // Only backup exists -- crash happened between RENAME and
+            // CREATE. Rename backup back so the rebuild starts from the
+            // canonical pre-state.
+            info!("Migration 48 resuming: only _api_keys_old_v46 exists; restoring api_keys");
+            conn.execute_batch("ALTER TABLE _api_keys_old_v46 RENAME TO api_keys;")
+                .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+        }
     }
 
     conn.execute_batch(
@@ -3392,6 +3469,63 @@ fn down_migration_memory_chunks(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+fn run_migration_activity_log_table(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS activity_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent TEXT NOT NULL,
+            action TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'activity'
+                CHECK (category IN ('activity','error','warning','task','note')),
+            importance INTEGER NOT NULL DEFAULT 4
+                CHECK (importance >= 1 AND importance <= 5),
+            session_id TEXT,
+            project TEXT,
+            host TEXT,
+            user_id INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_activity_log_session ON activity_log(session_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_activity_log_agent ON activity_log(agent);
+        CREATE INDEX IF NOT EXISTS idx_activity_log_user ON activity_log(user_id);
+        CREATE INDEX IF NOT EXISTS idx_activity_log_user_created ON activity_log(user_id, created_at DESC);",
+    )
+    .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+    Ok(())
+}
+
+fn down_migration_activity_log_table(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch("DROP TABLE IF EXISTS activity_log;")
+        .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+    Ok(())
+}
+
+fn run_migration_identity_keys_scopes(conn: &rusqlite::Connection) -> Result<()> {
+    let has_column: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('identity_keys') WHERE name = 'scopes'",
+            [],
+            |row| row.get::<_, i64>(0).map(|c| c > 0),
+        )
+        .unwrap_or(false);
+    if has_column {
+        return Ok(());
+    }
+    conn.execute_batch(
+        r#"ALTER TABLE identity_keys
+           ADD COLUMN scopes TEXT NOT NULL DEFAULT '["read","write","admin"]';"#,
+    )
+    .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+    Ok(())
+}
+
+fn down_migration_identity_keys_scopes(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch("ALTER TABLE identity_keys DROP COLUMN scopes;")
+        .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -3402,6 +3536,110 @@ mod tests {
 
     fn open_test_db() -> rusqlite::Connection {
         rusqlite::Connection::open_in_memory().expect("open in-memory test db")
+    }
+
+    /// Regression: every entry in MIGRATIONS must have a matching dispatch
+    /// block in `run_migrations()`. Without this test, a future contributor
+    /// could add a Migration entry but forget the `if current_version < ...`
+    /// block and the migration would silently never apply (this is what
+    /// blocker B1 was: v52 was registered but never dispatched).
+    #[test]
+    fn every_static_migration_is_dispatched() {
+        let conn = open_test_db();
+        run_migrations(&conn).expect("migrations apply on fresh db");
+        let highest_in_array = MIGRATIONS
+            .iter()
+            .map(|m| m.version)
+            .max()
+            .expect("MIGRATIONS not empty");
+        let applied: u32 = conn
+            .query_row(
+                "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+                [],
+                |r| r.get::<_, i64>(0).map(|v| v as u32),
+            )
+            .expect("query schema_version");
+        assert_eq!(
+            applied, highest_in_array,
+            "MIGRATIONS array contains v{highest_in_array} but run_migrations only applied up to v{applied}. \
+             Did you add an entry to the MIGRATIONS array without adding the matching dispatch block?"
+        );
+    }
+
+    /// Regression for B4: the v48 api_keys rebuild must be safe to re-run on
+    /// partial-failure states. Exercises the function directly because the
+    /// runner uses `MAX(version)` and won't re-dispatch v48 if any later
+    /// migration's row is still in schema_version.
+    #[test]
+    fn migration_48_recovery_is_idempotent_and_safe() {
+        let conn = open_test_db();
+        run_migrations(&conn).expect("first apply");
+
+        // Sanity: post-migration state. api_keys has no FK, no backup.
+        let api_keys_sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='api_keys'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(!api_keys_sql.contains("REFERENCES agents"));
+
+        // Case A: re-running on stable state is a no-op.
+        run_migration_drop_api_keys_agent_fk(&conn).expect("no-op re-run");
+        let backup: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='_api_keys_old_v46'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(backup, 0, "stable state must not produce a backup");
+
+        // Case B: simulate a crash after CREATE but before DROP. Both
+        // api_keys (new schema) and _api_keys_old_v46 (also new schema in
+        // this synthetic state) exist.
+        conn.execute_batch("CREATE TABLE _api_keys_old_v46 AS SELECT * FROM api_keys WHERE 0;")
+            .unwrap();
+        run_migration_drop_api_keys_agent_fk(&conn).expect("recovery (both tables)");
+        let backup: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='_api_keys_old_v46'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(backup, 0, "case B: backup must be cleaned up");
+        let sql: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='api_keys'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(!sql.contains("REFERENCES agents"));
+
+        // Case C: simulate a crash between RENAME and CREATE. Only the
+        // backup exists, api_keys is missing.
+        conn.execute_batch("ALTER TABLE api_keys RENAME TO _api_keys_old_v46;")
+            .unwrap();
+        run_migration_drop_api_keys_agent_fk(&conn).expect("recovery (only backup)");
+        let backup: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='_api_keys_old_v46'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(backup, 0, "case C: backup must be cleaned up");
+        let api_keys_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='api_keys'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(api_keys_count, 1, "case C: api_keys must be restored");
     }
 
     /// Helper: apply up through migration 21 then manually fake a lower
