@@ -2,10 +2,28 @@ use serde::Deserialize;
 
 use kleos_lib::cred::ProxyRequest;
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub(super) struct BootstrapBody {
     #[serde(default)]
     pub secret: Option<String>,
+}
+
+// M6: redact the bootstrap secret in any tracing/logging output. The
+// derive(Debug) would have printed the literal secret if a tracing layer
+// ever recorded the request body.
+impl std::fmt::Debug for BootstrapBody {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BootstrapBody")
+            .field(
+                "secret",
+                &match &self.secret {
+                    Some(_) => "<redacted>",
+                    None => "<none>",
+                },
+            )
+            .finish()
+    }
 }
 
 #[derive(Deserialize, Default)]
