@@ -29,7 +29,13 @@ impl DatabasePools {
         };
 
         if let Err(e) = pools.validate().await {
-            if encryption_key.is_none() || is_in_memory_db(db_path) {
+            // Only attempt legacy rekey on existing non-empty database files.
+            // Fresh databases or in-memory DBs should fail immediately.
+            let is_existing_file = !is_in_memory_db(db_path)
+                && std::fs::metadata(db_path)
+                    .map(|m| m.len() > 0)
+                    .unwrap_or(false);
+            if encryption_key.is_none() || !is_existing_file {
                 return Err(e);
             }
             tracing::debug!(db = db_path, error = %e, "raw hex key failed, trying legacy passphrase rekey");
@@ -270,15 +276,17 @@ fn migrate_legacy_passphrase_to_raw_hex(
     key: &[u8; crate::encryption::KEY_SIZE],
 ) -> Result<()> {
     use zeroize::Zeroize;
+    let hex_str = hex::encode(key);
     let raw_key_pragma = crate::encryption::format_pragma_key(key);
 
-    // The legacy passphrase is the x'...' literal wrapped in SQL string quotes.
-    // rusqlite's push_string_literal does wrap_and_escape(s, '\''), so internal
-    // single quotes get doubled. The passphrase SQLCipher received was the
-    // string value after SQL unescaping: x'<hex>'
+    // The legacy passphrase: old format_pragma_key returned x'<hex>' (no
+    // double quotes). rusqlite's pragma_update wrapped that in SQL string
+    // quotes with internal ' doubled: PRAGMA key = 'x''<hex>'''. SQLCipher
+    // received the passphrase x'<hex>' and derived the key via PBKDF2.
+    let legacy_passphrase = format!("x'{hex_str}'");
     let mut legacy_key_sql = format!(
         "PRAGMA key = '{}';",
-        &raw_key_pragma.replace('\'', "''")
+        legacy_passphrase.replace('\'', "''")
     );
 
     let conn = deadpool_sqlite::rusqlite::Connection::open(db_path).map_err(|e| {
