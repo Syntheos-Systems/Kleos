@@ -866,11 +866,21 @@ async fn backup_handler(
     // operators could save a corrupted file and only discover it at restore
     // time. integrity_check runs SQLite's `PRAGMA integrity_check` against
     // the snapshot and returns early on any reported issue.
-    if let Err(e) = kleos_lib::db::backup::integrity_check(&tmp_path).await {
-        let _ = tokio::fs::remove_file(&tmp_path).await;
-        return Err(AppError(kleos_lib::EngError::Internal(format!(
-            "backup integrity check failed: {e}"
-        ))));
+    match kleos_lib::db::backup::integrity_check(&tmp_path).await {
+        Ok(messages) if !messages.is_empty() => {
+            let _ = tokio::fs::remove_file(&tmp_path).await;
+            return Err(AppError(kleos_lib::EngError::Internal(format!(
+                "backup integrity check failed: {}",
+                messages.join("; ")
+            ))));
+        }
+        Err(e) => {
+            let _ = tokio::fs::remove_file(&tmp_path).await;
+            return Err(AppError(kleos_lib::EngError::Internal(format!(
+                "backup integrity check failed: {e}"
+            ))));
+        }
+        Ok(_) => {}
     }
 
     let bytes = tokio::fs::read(&tmp)
