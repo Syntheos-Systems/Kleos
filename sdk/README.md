@@ -1,6 +1,6 @@
-# Engram SDKs
+# Kleos SDKs
 
-Client libraries for the [Engram](https://github.com/Ghost-Frame/Kleos) memory server.
+Client libraries for the [Kleos](https://github.com/Ghost-Frame/Kleos) memory server.
 
 ## Available SDKs
 
@@ -81,7 +81,7 @@ go get github.com/Ghost-Frame/Kleos/sdk/go
 ## Authentication
 
 All SDKs use Bearer token authentication. Pass your API key when constructing
-the client. Keys are managed via the `/keys` endpoints or the Engram web UI.
+the client. Keys are managed via the `/keys` endpoints or the Kleos API.
 
 ```
 Authorization: Bearer ek-your-key-here

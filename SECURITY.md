@@ -132,3 +132,22 @@ None of these advisories are exploitable in engram's usage patterns.
 ## Acknowledgments
 
 We appreciate responsible disclosure. Contributors who report valid security issues will be acknowledged here (with permission).
+
+## Known Limitations and Deployment Assumptions
+
+### Replay-guard scope (single-node)
+The signed-envelope replay guard (`auth_piv::ReplayGuard`) maintains nonce
+uniqueness in process memory. Multi-node deployments must add an external
+deduplication layer or pin to single-node operation. Single-node is the
+supported configuration for v0.3.x.
+
+### CSP wasm-unsafe-eval
+The CSP allows `'wasm-unsafe-eval'` for the ONNX WASM runtime. Any future
+XSS could leverage WASM execution; the planned mitigation is iframe
+sandboxing of the WASM context. Treat the GUI as a trusted execution
+environment.
+
+### ENGRAM_OPEN_ACCESS is single-user only
+Setting `ENGRAM_OPEN_ACCESS=1` treats every unauthenticated request as
+`user_id=1`. The daemon refuses to start if combined with multi-tenant
+sharding (`ENGRAM_TENANT_SHARDING`).
