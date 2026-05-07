@@ -30,7 +30,7 @@ if [ ${#ENGRAM_DB_KEY} -ne 64 ]; then
     exit 1
 fi
 
-PRAGMA_KEY="x'${ENGRAM_DB_KEY}'"
+PRAGMA_KEY="\"x'${ENGRAM_DB_KEY}'\""
 
 command -v sqlcipher >/dev/null 2>&1 || { echo "ERROR: sqlcipher not in PATH"; exit 1; }
 command -v sqlite3 >/dev/null 2>&1 || { echo "ERROR: sqlite3 not in PATH"; exit 1; }
@@ -60,29 +60,34 @@ for db_file in "$TENANTS_DIR"/*/kleos.db; do
     # 1. Backup the original
     cp "$db_file" "$backup"
 
-    # 2. Dump the plaintext database
-    dump_file="$db_file.dump.sql"
-    if ! sqlite3 "$db_file" .dump > "$dump_file" 2>&1; then
-        echo "  FAILED: sqlite3 .dump failed for $tenant_id"
-        rm -f "$dump_file"
-        FAILED=$((FAILED + 1))
-        continue
-    fi
-
-    # 3. Create encrypted database from dump
+    # 2. Open the plaintext db with sqlcipher (no key), attach an encrypted
+    #    clone, and use sqlcipher_export() to copy everything including
+    #    virtual tables and sequences.
     rm -f "$encrypted"
-    if ! sqlcipher "$encrypted" "PRAGMA key = $PRAGMA_KEY; PRAGMA cipher_page_size = 4096;" ".read $dump_file" 2>&1; then
-        echo "  FAILED: sqlcipher import failed for $tenant_id"
-        rm -f "$encrypted" "$dump_file"
+    export_out=$(sqlcipher "$db_file" <<ENDSQL 2>&1
+ATTACH DATABASE '$encrypted' AS encrypted KEY $PRAGMA_KEY;
+SELECT sqlcipher_export('encrypted');
+DETACH DATABASE encrypted;
+ENDSQL
+    )
+    export_rc=$?
+    if [ $export_rc -ne 0 ]; then
+        echo "  FAILED: sqlcipher_export failed for $tenant_id"
+        echo "  $export_out"
+        rm -f "$encrypted"
         FAILED=$((FAILED + 1))
         continue
     fi
 
     # 4. Verify the encrypted db can be opened with the key
-    row_count=$(sqlcipher "$encrypted" "PRAGMA key = $PRAGMA_KEY; SELECT count(*) FROM sqlite_master;" 2>&1)
+    row_count=$(sqlcipher "$encrypted" <<ENDSQL 2>&1
+PRAGMA key = $PRAGMA_KEY;
+SELECT count(*) FROM sqlite_master;
+ENDSQL
+    )
     if [ $? -ne 0 ] || [ -z "$row_count" ]; then
         echo "  FAILED: encrypted db verification failed for $tenant_id"
-        rm -f "$encrypted" "$dump_file"
+        rm -f "$encrypted"
         FAILED=$((FAILED + 1))
         continue
     fi
@@ -90,14 +95,13 @@ for db_file in "$TENANTS_DIR"/*/kleos.db; do
     # 5. Verify plain sqlite3 CANNOT read the encrypted db
     if sqlite3 "$encrypted" "SELECT count(*) FROM sqlite_master;" >/dev/null 2>&1; then
         echo "  FAILED: encrypted db is still readable without key for $tenant_id"
-        rm -f "$encrypted" "$dump_file"
+        rm -f "$encrypted"
         FAILED=$((FAILED + 1))
         continue
     fi
 
     # 6. Atomic swap
     mv "$encrypted" "$db_file"
-    rm -f "$dump_file"
 
     # Also handle WAL/SHM files from the old plaintext db
     rm -f "$db_file-wal" "$db_file-shm"
