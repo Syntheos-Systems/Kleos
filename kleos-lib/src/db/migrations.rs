@@ -482,6 +482,13 @@ pub static MIGRATIONS: &[Migration] = &[
         down: Some(down_migration_identity_keys_scopes),
         transactional: true,
     },
+    Migration {
+        version: 54,
+        description: "tool_manifests",
+        up: run_migration_tool_manifests,
+        down: Some(down_migration_tool_manifests),
+        transactional: true,
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -541,6 +548,7 @@ const MIGRATION_GATE_REQUESTS_SESSION_ID: i64 = 50;
 const MIGRATION_MEMORY_CHUNKS: i64 = 51;
 const MIGRATION_ACTIVITY_LOG_TABLE: i64 = 52;
 const MIGRATION_IDENTITY_KEYS_SCOPES: i64 = 53;
+const MIGRATION_TOOL_MANIFESTS: i64 = 54;
 
 // ---------------------------------------------------------------------------
 // Up path (unchanged behavior)
@@ -963,6 +971,12 @@ pub fn run_migrations(conn: &rusqlite::Connection) -> Result<()> {
         info!("Running migration 53: identity_keys_scopes");
         run_migration_identity_keys_scopes(conn)?;
         record_migration(conn, MIGRATION_IDENTITY_KEYS_SCOPES, "identity_keys_scopes")?;
+    }
+
+    if current_version < MIGRATION_TOOL_MANIFESTS {
+        info!("Running migration 54: tool_manifests");
+        run_migration_tool_manifests(conn)?;
+        record_migration(conn, MIGRATION_TOOL_MANIFESTS, "tool_manifests")?;
     }
 
     Ok(())
@@ -3523,6 +3537,35 @@ fn run_migration_identity_keys_scopes(conn: &rusqlite::Connection) -> Result<()>
 fn down_migration_identity_keys_scopes(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch("ALTER TABLE identity_keys DROP COLUMN scopes;")
         .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// v54: tool_manifests
+// ---------------------------------------------------------------------------
+
+fn run_migration_tool_manifests(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS tool_manifests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent_identity_id INTEGER NOT NULL REFERENCES identity_keys(id) ON DELETE CASCADE,
+            manifest_hash TEXT NOT NULL,
+            declared_tools_json TEXT NOT NULL,
+            signed_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(agent_identity_id, manifest_hash)
+        );
+        CREATE INDEX IF NOT EXISTS idx_tool_manifests_agent ON tool_manifests(agent_identity_id);",
+    )
+    .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+    Ok(())
+}
+
+fn down_migration_tool_manifests(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(
+        "DROP INDEX IF EXISTS idx_tool_manifests_agent;
+         DROP TABLE IF EXISTS tool_manifests;",
+    )
+    .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
     Ok(())
 }
 
