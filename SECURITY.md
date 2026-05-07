@@ -128,6 +128,7 @@ These are transitive dependencies that cannot be upgraded without upstream relea
 | Crate | Versions | Reason |
 |-------|----------|--------|
 | base64 | 0.13.1, 0.22.x | `spm_precompiled -> tokenizers` pins 0.13; modern arrow uses 0.22. Small crate, low CVE history. Resolves when tokenizers drops spm_precompiled or upgrades internally. |
+| axum | 0.7.9, 0.8.x | `opentelemetry-proto -> tonic -> axum 0.7`. Structural -- proto codegen requires tonic even when using HTTP transport. Resolves at opentelemetry 0.28+ or tonic 0.13+ (axum 0.8). |
 
 None of these advisories are exploitable in engram's usage patterns.
 
