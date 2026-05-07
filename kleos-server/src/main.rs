@@ -183,6 +183,19 @@ async fn main() {
         }
         Err(_) => true,
     };
+
+    // L14: ENGRAM_OPEN_ACCESS=1 treats every unauthenticated request as
+    // user_id=1. Combined with tenant sharding it would expose ALL tenants
+    // through the synthetic single-user identity. Refuse to start.
+    if std::env::var("ENGRAM_OPEN_ACCESS").as_deref() == Ok("1") && tenant_sharding_enabled {
+        eprintln!(
+            "FATAL: ENGRAM_OPEN_ACCESS=1 with multi-tenant sharding would expose all tenants \
+             as user_id=1. Refusing to start. Either disable open access or set \
+             ENGRAM_TENANT_SHARDING=0 (single-user mode)."
+        );
+        std::process::exit(2);
+    }
+
     let tenant_registry = if tenant_sharding_enabled {
         use kleos_lib::tenant::{TenantConfig, TenantRegistry};
         let reg = TenantRegistry::new(

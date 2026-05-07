@@ -138,10 +138,21 @@ async fn load_or_generate_hmac_secret(data_dir: &str) -> SecretString {
     };
     let secret_path = validated_dir.join(".hmac_secret");
 
-    // Try to read existing secret
-    if let Ok(secret) = fs::read_to_string(&secret_path).await {
-        tighten_secret_perms(&secret_path).await;
-        return SecretString::new(secret);
+    // Try to read existing secret. H7: validate the format before trusting
+    // the file -- a truncated or whitespace-corrupted file would silently
+    // weaken the HMAC key. Expect 64 hex chars (32 bytes).
+    if let Ok(raw) = fs::read_to_string(&secret_path).await {
+        let trimmed = raw.trim();
+        let valid = trimmed.len() == 64 && trimmed.chars().all(|c| c.is_ascii_hexdigit());
+        if valid {
+            tighten_secret_perms(&secret_path).await;
+            return SecretString::new(trimmed.to_string());
+        }
+        tracing::warn!(
+            path = ?secret_path,
+            len = trimmed.len(),
+            "existing hmac secret has invalid format (expected 64 hex chars); regenerating"
+        );
     }
 
     // Generate new secret: 32 bytes from OsRng, hex encoded.
@@ -162,18 +173,73 @@ async fn load_or_generate_hmac_secret(data_dir: &str) -> SecretString {
         tracing::warn!(path = %validated_dir.display(), error = %e, "failed to create hmac secret data dir");
     }
 
-    // Atomic write: write to .tmp then rename to avoid TOCTOU partial-write.
-    // rename(2) is atomic on POSIX; on Windows this falls back to a replace.
+    // H7 + L8: create the tmp file with mode 0o600 from the start so a
+    // multi-user host cannot read the secret in the window between the
+    // initial write and the post-rename chmod. fsync before rename to
+    // ensure durability of the bytes before they become reachable under
+    // the canonical path. tighten_secret_perms remains as belt-and-braces.
     let tmp_path = secret_path.with_extension("tmp");
-    if fs::write(&tmp_path, secret.expose_secret()).await.is_ok() {
+    let write_ok = write_secret_file_0600(&tmp_path, secret.expose_secret().as_bytes()).await;
+    if write_ok {
         if let Err(e) = fs::rename(&tmp_path, &secret_path).await {
             tracing::warn!(error = %e, "failed to rename hmac secret tmp file");
+            let _ = fs::remove_file(&tmp_path).await;
         }
+    } else {
+        let _ = fs::remove_file(&tmp_path).await;
     }
     tighten_secret_perms(&secret_path).await;
     tracing::info!(path = ?secret_path, "generated HMAC secret");
 
     secret
+}
+
+/// H7: open `path` with mode 0o600 (Unix) and write `bytes` + fsync. On
+/// Windows the umask isn't relevant; create + write + sync is sufficient
+/// because Windows ACLs default to user-restrictive. Returns false on any
+/// error (caller logs via warn elsewhere).
+#[cfg(unix)]
+async fn write_secret_file_0600(path: &std::path::Path, bytes: &[u8]) -> bool {
+    use std::os::unix::fs::OpenOptionsExt;
+    use tokio::io::AsyncWriteExt;
+    let mut opts = fs::OpenOptions::new();
+    opts.create(true).write(true).truncate(true).mode(0o600);
+    let mut f = match opts.open(path).await {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::warn!(path = ?path, error = %e, "failed to create hmac secret tmp file");
+            return false;
+        }
+    };
+    if let Err(e) = f.write_all(bytes).await {
+        tracing::warn!(path = ?path, error = %e, "failed to write hmac secret bytes");
+        return false;
+    }
+    if let Err(e) = f.sync_all().await {
+        tracing::warn!(path = ?path, error = %e, "failed to fsync hmac secret tmp file");
+        return false;
+    }
+    true
+}
+
+#[cfg(not(unix))]
+async fn write_secret_file_0600(path: &std::path::Path, bytes: &[u8]) -> bool {
+    use tokio::io::AsyncWriteExt;
+    let mut opts = fs::OpenOptions::new();
+    opts.create(true).write(true).truncate(true);
+    let mut f = match opts.open(path).await {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::warn!(path = ?path, error = %e, "failed to create hmac secret tmp file");
+            return false;
+        }
+    };
+    if let Err(e) = f.write_all(bytes).await {
+        tracing::warn!(path = ?path, error = %e, "failed to write hmac secret bytes");
+        return false;
+    }
+    let _ = f.sync_all().await;
+    true
 }
 
 #[cfg(unix)]
