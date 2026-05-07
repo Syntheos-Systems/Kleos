@@ -28,6 +28,31 @@ impl DatabasePools {
             db_path: db_path.to_string(),
         };
 
+        if let Err(e) = pools.validate().await {
+            if encryption_key.is_none() || is_in_memory_db(db_path) {
+                return Err(e);
+            }
+            tracing::debug!(db = db_path, error = %e, "raw hex key failed, trying legacy passphrase rekey");
+        } else {
+            return Ok(pools);
+        }
+
+        // Raw hex key failed on a file-backed encrypted DB. The file may
+        // have been encrypted with the legacy passphrase method (rusqlite
+        // pragma_update quoted the x'...' hex literal). Open a direct
+        // connection with the legacy passphrase, PRAGMA rekey to raw hex,
+        // then rebuild pools with the corrected file.
+        let key = encryption_key.unwrap();
+        migrate_legacy_passphrase_to_raw_hex(db_path, &key)?;
+
+        let reader = build_pool(db_path, config.max_readers, config, encryption_key)?;
+        let writer = build_pool(db_path, config.writer_count.max(1), config, encryption_key)?;
+        let pools = Self {
+            reader,
+            writer,
+            config,
+            db_path: db_path.to_string(),
+        };
         pools.validate().await?;
 
         Ok(pools)
@@ -231,6 +256,62 @@ fn apply_pragmas(
 
 fn is_in_memory_db(db_path: &str) -> bool {
     db_path == ":memory:" || (db_path.starts_with("file:") && db_path.contains("mode=memory"))
+}
+
+/// Migrate a database from legacy passphrase encryption to raw hex key mode.
+///
+/// Prior to the PRAGMA key fix, rusqlite's `pragma_update` wrapped the
+/// `x'<hex>'` literal in single quotes, causing SQLCipher to treat it as a
+/// passphrase (PBKDF2-derived) instead of a raw 256-bit key. This opens the
+/// file with that legacy passphrase and uses `PRAGMA rekey` to re-encrypt
+/// with the correct raw hex key.
+fn migrate_legacy_passphrase_to_raw_hex(
+    db_path: &str,
+    key: &[u8; crate::encryption::KEY_SIZE],
+) -> Result<()> {
+    use zeroize::Zeroize;
+    let raw_key_pragma = crate::encryption::format_pragma_key(key);
+
+    // The legacy passphrase is the x'...' literal wrapped in SQL string quotes.
+    // rusqlite's push_string_literal does wrap_and_escape(s, '\''), so internal
+    // single quotes get doubled. The passphrase SQLCipher received was the
+    // string value after SQL unescaping: x'<hex>'
+    let mut legacy_key_sql = format!(
+        "PRAGMA key = '{}';",
+        &raw_key_pragma.replace('\'', "''")
+    );
+
+    let conn = deadpool_sqlite::rusqlite::Connection::open(db_path).map_err(|e| {
+        EngError::DatabaseMessage(format!("failed to open {db_path} for rekey: {e}"))
+    })?;
+
+    conn.execute_batch(&legacy_key_sql).map_err(|e| {
+        EngError::DatabaseMessage(format!("legacy PRAGMA key failed on {db_path}: {e}"))
+    })?;
+    legacy_key_sql.zeroize();
+
+    // Verify the legacy key works
+    conn.pragma_query_value(None, "schema_version", |_| Ok(()))
+        .map_err(|e| {
+            EngError::DatabaseMessage(format!(
+                "legacy passphrase verification failed on {db_path}: {e} -- \
+                 the database may be encrypted with a different key"
+            ))
+        })?;
+
+    // Rekey to raw hex mode
+    let mut rekey_sql = format!("PRAGMA rekey = {};", &raw_key_pragma);
+    conn.execute_batch(&rekey_sql).map_err(|e| {
+        EngError::DatabaseMessage(format!("PRAGMA rekey failed on {db_path}: {e}"))
+    })?;
+    rekey_sql.zeroize();
+
+    tracing::warn!(
+        db = db_path,
+        "migrated encryption from legacy passphrase to raw hex key"
+    );
+
+    Ok(())
 }
 
 #[cfg(test)]
