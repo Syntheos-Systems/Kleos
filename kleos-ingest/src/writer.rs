@@ -193,7 +193,7 @@ impl KleosWriter {
             return;
         }
         let buffer = std::mem::take(&mut self.retry_buffer);
-        let mut failed = Vec::new();
+        let failed = Vec::new();
         for candidate in buffer {
             if !self.post_memory(candidate).await {
                 tracing::warn!("retry failed, dropping memory");

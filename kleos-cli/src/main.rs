@@ -1646,7 +1646,7 @@ async fn handle_skill_command(client: &Client, cmd: &SkillCommands) {
             agent,
             language,
         } => {
-            let code = std::fs::read_to_string(&file).unwrap_or_else(|e| {
+            let code = std::fs::read_to_string(file).unwrap_or_else(|e| {
                 eprintln!("Error reading {}: {}", file, e);
                 std::process::exit(1);
             });

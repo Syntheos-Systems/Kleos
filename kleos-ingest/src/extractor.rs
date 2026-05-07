@@ -8,6 +8,7 @@ pub struct MemoryCandidate {
     pub importance: i32,
     pub source: String,
     pub session_id: String,
+    #[expect(dead_code)]
     pub project: String,
 }
 
@@ -46,8 +47,8 @@ impl Extractor {
 
         let lower = trimmed.to_lowercase();
         let mut tags = Vec::new();
-        let mut category = "general";
-        let mut importance = 5;
+        let category;
+        let importance;
 
         // Classification rules
         if contains_any(&lower, &["deployed", "shipped", "pushed to"]) || has_commit_hash(trimmed) {
