@@ -97,12 +97,49 @@ fn open_access_context() -> AuthContext {
 }
 
 fn synthetic_key_for_identity(user_id: i64) -> ApiKey {
+    synthetic_key_for_identity_with_scopes(user_id, None)
+}
+
+/// Build the in-memory ApiKey for a signed-envelope request. When `scopes_json`
+/// is provided (from the v53 `identity_keys.scopes` column), parse it and use
+/// those scopes; otherwise default to full admin (legacy behavior). Unparseable
+/// JSON falls back to admin with a warning -- no PIV holder should be locked
+/// out of their own data because of a corrupt scopes value (M4).
+fn synthetic_key_for_identity_with_scopes(user_id: i64, scopes_json: Option<&str>) -> ApiKey {
+    let scopes = scopes_json
+        .and_then(|s| {
+            serde_json::from_str::<Vec<String>>(s)
+                .map_err(|e| {
+                    tracing::warn!(error = %e, raw = %s, user_id,
+                        "identity_keys.scopes JSON unparseable; falling back to admin");
+                    e
+                })
+                .ok()
+        })
+        .map(|names| {
+            names
+                .iter()
+                .filter_map(|n| match n.as_str() {
+                    "read" => Some(Scope::Read),
+                    "write" => Some(Scope::Write),
+                    "admin" => Some(Scope::Admin),
+                    other => {
+                        tracing::warn!(scope = %other, user_id,
+                            "unknown scope in identity_keys.scopes; ignoring");
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .filter(|v: &Vec<Scope>| !v.is_empty())
+        .unwrap_or_else(|| vec![Scope::Read, Scope::Write, Scope::Admin]);
+
     ApiKey {
         id: 0,
         user_id,
         key_prefix: "sig".into(),
         name: "identity-signed".into(),
-        scopes: vec![Scope::Read, Scope::Write, Scope::Admin],
+        scopes,
         rate_limit: 1000,
         is_active: true,
         agent_id: None,
@@ -117,9 +154,9 @@ fn open_access_allowed() -> bool {
     if std::env::var("ENGRAM_OPEN_ACCESS").as_deref() != Ok("1") {
         return false;
     }
-    if cfg!(debug_assertions) {
-        return true;
-    }
+    // Require explicit confirmation in BOTH debug and release builds. The
+    // dev-loop convenience of an unconditional debug bypass is not worth the
+    // foot-gun if a debug binary ever reaches a non-dev environment (H5).
     matches!(
         std::env::var("ENGRAM_ALLOW_OPEN_ACCESS_IN_RELEASE").as_deref(),
         Ok("yes-i-am-sure")
@@ -196,6 +233,7 @@ struct IdentityKeyRow {
     tier: String,
     algo: String,
     pubkey_pem: String,
+    scopes_json: Option<String>,
 }
 
 #[tracing::instrument(skip_all, fields(middleware = "server.auth"))]
@@ -226,6 +264,17 @@ pub async fn auth_middleware(
         match state.session_manager.verify(&session_token) {
             Ok(identity_id) => match resolve_identity_by_id(&state, identity_id).await {
                 Ok(auth_ctx) => {
+                    // M5: enforce signature_required uniformly. A session
+                    // token is a delegated credential -- it bypasses the
+                    // per-request signature check, so users opted into PIV
+                    // (KLEOS_REQUIRE_SIGNATURE_FOR_USER) must not be able to
+                    // re-use a session token in lieu of signing.
+                    if signature_required_for_user(auth_ctx.user_id) {
+                        tracing::warn!(user_id = auth_ctx.user_id,
+                            client_ip = %req_client_ip, path = %path,
+                            "session auth rejected: signature required for this user");
+                        return unauthorized("signature required for this user");
+                    }
                     let user_id = auth_ctx.user_id;
                     let mut request = request;
                     request.extensions_mut().insert(auth_ctx);
@@ -274,7 +323,7 @@ pub async fn auth_middleware(
             .db
             .read(move |conn| {
                 conn.query_row(
-                    "SELECT id, user_id, tier, algo, pubkey_pem
+                    "SELECT id, user_id, tier, algo, pubkey_pem, scopes
                      FROM identity_keys
                      WHERE pubkey_fingerprint = ?1 AND is_active = 1",
                     params![key_fp],
@@ -285,6 +334,7 @@ pub async fn auth_middleware(
                             tier: row.get(2)?,
                             algo: row.get(3)?,
                             pubkey_pem: row.get(4)?,
+                            scopes_json: row.get(5)?,
                         })
                     },
                 )
@@ -510,7 +560,7 @@ pub async fn auth_middleware(
 
         let user_id = ik_row.user_id;
         let auth_ctx = AuthContext {
-            key: synthetic_key_for_identity(user_id),
+            key: synthetic_key_for_identity_with_scopes(user_id, ik_row.scopes_json.as_deref()),
             user_id,
             identity: Some(identity_ctx),
         };
@@ -587,6 +637,7 @@ pub async fn auth_middleware(
         };
 
         #[derive(serde::Deserialize)]
+        #[serde(deny_unknown_fields)]
         struct EnrollProof {
             algo: String,
             tier: String,

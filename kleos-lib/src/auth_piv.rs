@@ -195,8 +195,15 @@ fn pem_to_ed25519_pubkey(pem: &str) -> Result<[u8; 32]> {
             "PEM does not contain a valid Ed25519 SubjectPublicKeyInfo".into(),
         ));
     }
+    // M8: avoid raw [12..] indexing, which would panic if der.len() ever
+    // changed without the length check above. Using checked slicing keeps
+    // the function panic-free even if a future ED25519_SPKI_PREFIX edit
+    // skips the length update.
+    let key_slice = der.get(12..44).ok_or_else(|| {
+        EngError::InvalidInput("Ed25519 SPKI bytes shorter than required after prefix".into())
+    })?;
     let mut key = [0u8; 32];
-    key.copy_from_slice(&der[12..]);
+    key.copy_from_slice(key_slice);
     Ok(key)
 }
 

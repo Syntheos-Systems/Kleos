@@ -924,8 +924,23 @@ fn sanitize_pitr_dest(data_dir: &str, raw: &str) -> Result<std::path::PathBuf, A
     if !candidate.starts_with(&jail_canon) {
         return Err(invalid("resolves outside restore jail"));
     }
-    if candidate.symlink_metadata().is_ok() {
-        return Err(invalid("target already exists"));
+    // L7: avoid TOCTOU between the existence check and the actual restore
+    // write. Atomically claim the path via O_EXCL create. On EEXIST we map
+    // to the same caller-visible "target already exists" error. On success
+    // we keep the empty placeholder file -- the restore step owns the
+    // canonical write to this path.
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&candidate)
+    {
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(invalid("target already exists"));
+        }
+        Err(e) => {
+            return Err(invalid(&format!("failed to claim restore path: {e}")));
+        }
     }
 
     Ok(candidate)
