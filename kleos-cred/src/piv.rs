@@ -415,3 +415,91 @@ pub fn pubkey_fingerprint(pem: &str) -> String {
         .collect::<Vec<_>>()
         .join(":")
 }
+
+// NOTE: Tests for generate_p256_key, generate_self_signed_cert, export_pubkey_pem,
+// slot_has_key, ecdh_agree, and piv_sign are intentionally omitted -- they all
+// invoke ykman/python3 subprocesses and require a physical YubiKey to be present.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn piv_slot_hex_strings() {
+        assert_eq!(PivSlot::Authentication.as_hex(), "9a");
+        assert_eq!(PivSlot::Signature.as_hex(), "9c");
+        assert_eq!(PivSlot::KeyManagement.as_hex(), "9d");
+    }
+
+    #[test]
+    fn piv_slot_yubikit_names() {
+        assert_eq!(PivSlot::Authentication.yubikit_name(), "AUTHENTICATION");
+        assert_eq!(PivSlot::Signature.yubikit_name(), "SIGNATURE");
+        assert_eq!(PivSlot::KeyManagement.yubikit_name(), "KEY_MANAGEMENT");
+    }
+
+    #[test]
+    fn pin_policy_strings() {
+        assert_eq!(PinPolicy::Never.as_str(), "never");
+        assert_eq!(PinPolicy::Once.as_str(), "once");
+        assert_eq!(PinPolicy::Always.as_str(), "always");
+    }
+
+    #[test]
+    fn touch_policy_strings() {
+        assert_eq!(TouchPolicy::Never.as_str(), "never");
+        assert_eq!(TouchPolicy::Always.as_str(), "always");
+        assert_eq!(TouchPolicy::Cached.as_str(), "cached");
+    }
+
+    #[test]
+    fn pubkey_fingerprint_deterministic() {
+        let pem = "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQY=\n-----END PUBLIC KEY-----\n";
+        let fp1 = pubkey_fingerprint(pem);
+        let fp2 = pubkey_fingerprint(pem);
+        assert_eq!(fp1, fp2);
+    }
+
+    #[test]
+    fn pubkey_fingerprint_format() {
+        let pem = "test-pem-data";
+        let fp = pubkey_fingerprint(pem);
+        // SHA-256 is 32 bytes = 31 colons separating 32 two-char hex groups
+        let parts: Vec<&str> = fp.split(':').collect();
+        assert_eq!(parts.len(), 32, "fingerprint must have 32 colon-separated bytes");
+        for part in &parts {
+            assert_eq!(part.len(), 2, "each byte must be 2 uppercase hex chars");
+            assert!(part.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_lowercase()),
+                "hex chars must be uppercase");
+        }
+    }
+
+    #[test]
+    fn pubkey_fingerprint_differs_with_different_input() {
+        let fp1 = pubkey_fingerprint("pem-a");
+        let fp2 = pubkey_fingerprint("pem-b");
+        assert_ne!(fp1, fp2);
+    }
+
+    #[test]
+    fn ecdh_agree_rejects_non_key_management_slot() {
+        // This test exercises the slot validation without needing a YubiKey.
+        // ecdh_agree returns Err immediately when the slot is wrong.
+        let result = crate::piv::ecdh_agree(PivSlot::Authentication, "dummy-pem");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("KEY_MANAGEMENT") || msg.contains("9D") || msg.contains("9d"),
+            "error should mention KEY_MANAGEMENT slot, got: {}", msg);
+    }
+
+    #[test]
+    fn piv_sign_rejects_key_management_slot() {
+        // piv_sign only allows 9A and 9C; 9D must be rejected without subprocess.
+        let result = crate::piv::piv_sign(PivSlot::KeyManagement, b"payload");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("AUTHENTICATION") || msg.contains("SIGNATURE") || msg.contains("9A") || msg.contains("9a"),
+            "error should mention valid slots, got: {}", msg);
+    }
+}
