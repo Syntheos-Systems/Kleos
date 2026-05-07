@@ -657,7 +657,6 @@ async fn compress(
         temperature: Some(0.1),
         priority: Priority::Hot,
         timeout_ms: Some(state.compress_timeout_ms),
-        ..Default::default()
     };
 
     match llm

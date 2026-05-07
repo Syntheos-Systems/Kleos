@@ -279,7 +279,7 @@ pub async fn sync_handler(
 ) -> Result<Json<Value>, AppError> {
     let entries = kleos_sync::fetch_v3_entries(&state)
         .await
-        .map_err(|e| CredError::InvalidInput(e))?;
+        .map_err(CredError::InvalidInput)?;
 
     let mut synced = 0u32;
     let mut skipped = 0u32;

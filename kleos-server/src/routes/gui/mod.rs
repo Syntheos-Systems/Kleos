@@ -200,7 +200,6 @@ async fn load_or_generate_hmac_secret(data_dir: &str) -> SecretString {
 /// error (caller logs via warn elsewhere).
 #[cfg(unix)]
 async fn write_secret_file_0600(path: &std::path::Path, bytes: &[u8]) -> bool {
-    use std::os::unix::fs::OpenOptionsExt;
     use tokio::io::AsyncWriteExt;
     let mut opts = fs::OpenOptions::new();
     opts.create(true).write(true).truncate(true).mode(0o600);
