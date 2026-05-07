@@ -34,6 +34,7 @@ pub mod memory;
 pub mod onboard;
 pub mod pack;
 pub mod personality;
+pub mod policy;
 pub mod platform;
 pub mod portability;
 pub mod projects;

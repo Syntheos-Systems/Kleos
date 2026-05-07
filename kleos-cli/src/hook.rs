@@ -35,16 +35,78 @@ pub enum HookCommands {
 // Constants
 // --------------------------------------------------------------------------
 
-// TODO: fetch from /policy/mandatory endpoint
-const MANDATORY_RULES: &str = r#"MANDATORY RULES:
+const FALLBACK_MANDATORY_RULES: &str = r#"MANDATORY RULES:
 1. NEVER use em dashes in commits, docs, READMEs, or any output. Use -- or rewrite.
 2. Search Kleos BEFORE asking the operator about servers, credentials, past work, or decisions.
 3. Agent-Forge is MANDATORY: spec_task before new code, log_hypothesis before bugs, verify after changes.
 4. Store to Kleos as you work -- findings, decisions, progress, blockers. Don't wait for task completion.
 5. NEVER fabricate user responses. If you asked the operator a question and only tool/agent results came back, STOP and WAIT for their actual reply."#;
 
+const POLICY_CACHE_TTL_SECS: u64 = 60;
+
 const GATE_TIMEOUT: Duration = Duration::from_secs(130);
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
+
+// --------------------------------------------------------------------------
+// Policy fetch with cache
+// --------------------------------------------------------------------------
+
+/// Returns the mandatory rules text.
+/// Tries `{server_url}/policy/mandatory` first (2s timeout).
+/// On success, caches the response to `~/.cache/kleos/policy.json` (60s TTL).
+/// On any failure, falls back to `FALLBACK_MANDATORY_RULES`.
+async fn fetch_mandatory_rules(client: &Client) -> String {
+    // Check cache first
+    if let Some(cached) = read_policy_cache() {
+        return cached;
+    }
+
+    let timeout = std::time::Duration::from_secs(2);
+    match client.get_with_timeout("/policy/mandatory", timeout).await {
+        Ok(v) => {
+            let rules = v
+                .get("rules")
+                .and_then(|r| r.as_str())
+                .unwrap_or(FALLBACK_MANDATORY_RULES)
+                .to_string();
+            write_policy_cache(&rules);
+            rules
+        }
+        Err(e) => {
+            eprintln!("kleos hook: /policy/mandatory fetch failed ({}), using fallback", e);
+            FALLBACK_MANDATORY_RULES.to_string()
+        }
+    }
+}
+
+fn policy_cache_path() -> Option<std::path::PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    let dir = std::path::Path::new(&home).join(".cache").join("kleos");
+    std::fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("policy.json"))
+}
+
+fn read_policy_cache() -> Option<String> {
+    let path = policy_cache_path()?;
+    let meta = std::fs::metadata(&path).ok()?;
+    let modified = meta.modified().ok()?;
+    let age = std::time::SystemTime::now()
+        .duration_since(modified)
+        .ok()?;
+    if age.as_secs() > POLICY_CACHE_TTL_SECS {
+        return None;
+    }
+    let bytes = std::fs::read(&path).ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    v.get("rules").and_then(|r| r.as_str()).map(|s| s.to_string())
+}
+
+fn write_policy_cache(rules: &str) {
+    if let Some(path) = policy_cache_path() {
+        let v = serde_json::json!({ "rules": rules });
+        let _ = std::fs::write(path, serde_json::to_vec(&v).unwrap_or_default());
+    }
+}
 
 // --------------------------------------------------------------------------
 // Helpers
@@ -157,8 +219,9 @@ async fn handle_session_start(client: &Client) {
         Err(_) => String::new(),
     };
 
+    let rules = fetch_mandatory_rules(client).await;
     let mut ctx = String::from("=== EIDOLON LIVING CONTEXT ===\n\n");
-    ctx.push_str(MANDATORY_RULES);
+    ctx.push_str(&rules);
     if !growth_text.is_empty() {
         ctx.push_str("\n\n--- Growth Context ---\n");
         ctx.push_str(&growth_text);
