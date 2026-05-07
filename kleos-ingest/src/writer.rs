@@ -198,7 +198,6 @@ impl KleosWriter {
                 tracing::warn!("retry failed, dropping memory");
             }
         }
-        self.retry_buffer.clear();
     }
 
     pub async fn store_summary(&mut self, content: &str, session_id: &str, project: &str) -> bool {
