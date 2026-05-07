@@ -400,10 +400,10 @@ mod tests {
 
     /// Phase 5.5 dropped user_id from approvals: tenant isolation is
     /// enforced at the database level (one shard per tenant), so a
-    /// shared in-memory DB no longer separates user 1 and user 2. The
-    /// invariant the tenant harness must uphold (different shards see
-    /// different rows) is covered in kleos-server/tests once Phase 4.2
-    /// wires the tenant-aware test harness.
+    /// shared in-memory DB no longer separates user 1 and user 2.
+    ///
+    /// The shard-level invariant is now covered by:
+    ///   kleos-lib/tests/tenant_isolation.rs::approvals_isolated_across_tenants
     #[tokio::test]
     #[ignore]
     async fn test_tenant_isolation() {
