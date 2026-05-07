@@ -277,6 +277,11 @@ pub static TENANT_MIGRATIONS: &[TenantMigration] = &[
         description: "supervisor_injections_fix_schema",
         up: apply_schema_v48_supervisor_injections_fix,
     },
+    TenantMigration {
+        version: 49,
+        description: "activity_log_table",
+        up: apply_schema_v49_activity_log,
+    },
 ];
 
 fn apply_schema_v1(conn: &Connection) -> Result<()> {
@@ -583,6 +588,32 @@ fn apply_schema_v48_supervisor_injections_fix(conn: &Connection) -> Result<()> {
             WHERE claimed_at IS NULL;",
     )
     .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v48 (index) failed: {e}")))?;
+    Ok(())
+}
+
+fn apply_schema_v49_activity_log(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS activity_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent TEXT NOT NULL,
+            action TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'activity'
+                CHECK (category IN ('activity','error','warning','task','note')),
+            importance INTEGER NOT NULL DEFAULT 4
+                CHECK (importance >= 1 AND importance <= 5),
+            session_id TEXT,
+            project TEXT,
+            host TEXT,
+            user_id INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_activity_log_session ON activity_log(session_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_activity_log_agent ON activity_log(agent);
+        CREATE INDEX IF NOT EXISTS idx_activity_log_user ON activity_log(user_id);
+        CREATE INDEX IF NOT EXISTS idx_activity_log_user_created ON activity_log(user_id, created_at DESC);",
+    )
+    .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v49 failed: {e}")))?;
     Ok(())
 }
 
