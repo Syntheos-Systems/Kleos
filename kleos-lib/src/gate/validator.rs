@@ -127,8 +127,8 @@ pub fn check_dangerous_patterns(command: &str, config: &Config) -> Option<String
 
     // Secondary interpreter / encoding bypass detection
     // These can be used to smuggle dangerous commands past substring checks
+    let tokens: Vec<&str> = cmd_lower.split_whitespace().collect();
     {
-        let tokens: Vec<&str> = cmd_lower.split_whitespace().collect();
         for (i, token) in tokens.iter().enumerate() {
             // python/python3 -c, perl/perl5 -e, ruby -e
             // Also catch full-path invocations like /usr/bin/python3 and env-wrapped calls
@@ -252,7 +252,6 @@ pub fn check_dangerous_patterns(command: &str, config: &Config) -> Option<String
 
     // Extended interpreter coverage: node, deno, lua, php, etc.
     {
-        let tokens: Vec<&str> = cmd_lower.split_whitespace().collect();
         for (i, token) in tokens.iter().enumerate() {
             let basename = token.rsplit('/').next().unwrap_or(token);
 
