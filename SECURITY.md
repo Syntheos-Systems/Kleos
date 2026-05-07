@@ -47,7 +47,7 @@ You can expect an initial response within 72 hours. We'll work with you to under
 
 ### Credential Management
 
-- `engram-credd` handles secrets with AES-256-GCM encryption
+- `kleos-credd` handles secrets with AES-256-GCM encryption
 - Master password never stored -- used to derive encryption key
 - Agent keys are scoped and rotatable
 - `allow_raw` flag is explicitly opt-in and logged
@@ -107,15 +107,7 @@ For production deployments:
 
 These are transitive dependencies that cannot be upgraded without upstream releases.
 
-**engram-migrate only** (via libsql 0.6.0 -- does not affect server, CLI, or credd):
-
-| Advisory | Crate | Status |
-|----------|-------|--------|
-| RUSTSEC-2026-0049 | rustls-webpki 0.102.8 | libsql pins rustls 0.22.4; needs rustls 0.23+ |
-| RUSTSEC-2025-0141 | bincode 1.3.3 | libsql depends on bincode 1.x |
-| RUSTSEC-2025-0134 | rustls-pemfile 2.2.0 | libsql via hyper-rustls 0.25 |
-
-**engram-lib** (via lancedb -> tantivy 0.24.2, tokenizers):
+**kleos-lib** (via lancedb -> tantivy 0.24.2, tokenizers):
 
 | Advisory | Crate | Status |
 |----------|-------|--------|
@@ -130,11 +122,14 @@ These are transitive dependencies that cannot be upgraded without upstream relea
 | base64 | 0.13.1, 0.22.x | `spm_precompiled -> tokenizers` pins 0.13; modern arrow uses 0.22. Small crate, low CVE history. Resolves when tokenizers drops spm_precompiled or upgrades internally. |
 | axum | 0.7.9, 0.8.x | `opentelemetry-proto -> tonic -> axum 0.7`. Structural -- proto codegen requires tonic even when using HTTP transport. Resolves at opentelemetry 0.28+ or tonic 0.13+ (axum 0.8). |
 
-None of these advisories are exploitable in engram's usage patterns.
+None of these advisories are exploitable in Kleos's usage patterns.
 
-### Build issue: engram-migrate
+### Build issue: kleos-migrate
 
-`engram-migrate` has a linker conflict between libsqlite3-sys (SQLCipher) and libsql-ffi (bundled sqlite3). Both define the same sqlite3 symbols. This is a one-shot ETL utility and does not affect the server, CLI, or credential daemon.
+`kleos-migrate` uses `bundled-sqlcipher` (via rusqlite) which defines its own
+sqlite3 symbols. It is excluded from `--workspace` builds and tested separately.
+This is a one-shot ETL utility and does not affect the server, CLI, or
+credential daemon.
 
 ## Acknowledgments
 
