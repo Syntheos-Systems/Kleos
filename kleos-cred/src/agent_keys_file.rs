@@ -373,4 +373,99 @@ mod tests {
         let r = store.generate("z", "", vec!["bad scope with spaces".into()]);
         assert!(r.is_err());
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_sets_mode_0600() {
+        use std::os::unix::fs::PermissionsExt;
+        let _g = ENV_GUARD.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("agent-keys.json");
+        let mut store = FileAgentKeyStore::load_from(path.clone()).unwrap();
+        store
+            .generate("perm-test-agent", "perm test", vec!["bootstrap/perm-test-agent".into()])
+            .unwrap();
+        let metadata = std::fs::metadata(&path).unwrap();
+        let mode = metadata.permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "agent-keys.json must be mode 0600, got {:#o}", mode);
+    }
+
+    #[test]
+    fn load_from_missing_path_returns_empty_store() {
+        let _g = ENV_GUARD.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nonexistent-keys.json");
+        let store = FileAgentKeyStore::load_from(path).unwrap();
+        assert!(store.keys.is_empty());
+    }
+
+    #[test]
+    fn load_from_corrupted_json_returns_empty_store() {
+        let _g = ENV_GUARD.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("corrupt.json");
+        std::fs::write(&path, b"this is not valid json {{{{").unwrap();
+        let store = FileAgentKeyStore::load_from(path).unwrap();
+        assert!(store.keys.is_empty());
+    }
+
+    #[test]
+    fn duplicate_active_key_rejected() {
+        let _g = ENV_GUARD.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("agent-keys.json");
+        let mut store = FileAgentKeyStore::load_from(path).unwrap();
+        store
+            .generate("dup-agent", "first", vec!["bootstrap/dup-agent".into()])
+            .unwrap();
+        let r = store.generate("dup-agent", "second", vec!["bootstrap/dup-agent".into()]);
+        assert!(r.is_err(), "generating a second active key for the same id must fail");
+    }
+
+    #[test]
+    fn revoke_nonexistent_key_errors() {
+        let _g = ENV_GUARD.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("agent-keys.json");
+        let mut store = FileAgentKeyStore::load_from(path).unwrap();
+        let r = store.revoke("ghost-agent");
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn validate_empty_bearer_returns_none() {
+        let _g = ENV_GUARD.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("agent-keys.json");
+        let store = FileAgentKeyStore::load_from(path).unwrap();
+        assert_eq!(store.validate(""), None);
+        assert_eq!(store.validate("   "), None);
+    }
+
+    #[test]
+    fn invalid_agent_id_rejected() {
+        let _g = ENV_GUARD.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("agent-keys.json");
+        let mut store = FileAgentKeyStore::load_from(path).unwrap();
+        // Spaces not allowed in agent_id
+        let r = store.generate("bad agent id", "desc", vec!["bootstrap/bad".into()]);
+        assert!(r.is_err());
+        // Empty agent_id not allowed
+        let r2 = store.generate("", "desc", vec!["bootstrap/x".into()]);
+        assert!(r2.is_err());
+    }
+
+    #[test]
+    fn global_wildcard_scope_grants_all() {
+        let _g = ENV_GUARD.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("agent-keys.json");
+        let mut store = FileAgentKeyStore::load_from(path).unwrap();
+        store
+            .generate("superuser-agent", "admin", vec!["*".into()])
+            .unwrap();
+        assert!(store.has_scope("superuser-agent", "any-service", "any-key"));
+        assert!(store.has_scope("superuser-agent", "bootstrap", "something"));
+    }
 }
