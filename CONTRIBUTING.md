@@ -62,7 +62,7 @@ cargo check --workspace
 cargo test --workspace
 
 # Lint before committing - warnings are errors
-cargo clippy --workspace - -D warnings
+cargo clippy --workspace -- -D warnings
 ```
 
 ### Code Style
