@@ -91,6 +91,7 @@ fn memory_to_json(m: &kleos_lib::memory::types::Memory) -> Value {
     })
 }
 
+#[tracing::instrument(skip_all)]
 async fn store_memory(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -188,6 +189,7 @@ async fn store_memory(
     ))
 }
 
+#[tracing::instrument(skip_all)]
 async fn search_memories(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -302,6 +304,7 @@ async fn search_memories(
 /// Part 5.13: POST /search/explain -- runs the full hybrid search pipeline and
 /// returns a per-result score breakdown (lexical/vector/graph/reranker/fused)
 /// alongside stage timings so operators can diagnose ranking regressions.
+#[tracing::instrument(skip_all)]
 async fn explain_search(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -418,6 +421,7 @@ async fn explain_search(
     })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn recall(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -577,6 +581,7 @@ async fn recall(
     })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn list_memories(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -597,6 +602,7 @@ async fn list_memories(
     Ok(Json(json!({ "results": results })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn get_memory(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -606,6 +612,7 @@ async fn get_memory(
     Ok(Json(memory_to_json(&mem)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn delete_memory(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -615,6 +622,7 @@ async fn delete_memory(
     Ok(Json(json!({ "deleted": true, "id": id })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn list_trashed(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -626,6 +634,7 @@ async fn list_trashed(
     Ok(Json(json!({ "memories": items, "count": items.len() })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn restore_memory(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -635,6 +644,7 @@ async fn restore_memory(
     Ok(Json(memory_to_json(&restored)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn update_memory(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -645,11 +655,13 @@ async fn update_memory(
     Ok(Json(memory_to_json(&updated)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn list_tags(Auth(auth): Auth, ResolvedDb(db): ResolvedDb) -> Result<Json<Value>, AppError> {
     let tags = memory::list_all_tags(&db, auth.user_id).await?;
     Ok(Json(json!({ "tags": tags })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn search_tags(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -674,6 +686,7 @@ async fn search_tags(
 }
 
 // 3.11: POST /search/faceted -- structured filter + facet aggregation
+#[tracing::instrument(skip_all)]
 async fn faceted_search_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -697,6 +710,7 @@ async fn faceted_search_handler(
     Ok(Json(json!(resp)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn update_tags(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -708,6 +722,7 @@ async fn update_tags(
     Ok(Json(memory_to_json(&updated)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn profile_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -716,6 +731,7 @@ async fn profile_handler(
     Ok(Json(json!(profile)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn synthesize_profile(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -760,11 +776,13 @@ async fn synthesize_profile(
     Ok(Json(json!(profile)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn user_stats(Auth(auth): Auth, ResolvedDb(db): ResolvedDb) -> Result<Json<Value>, AppError> {
     let stats = memory::get_user_stats(&db, auth.user_id).await?;
     Ok(Json(json!(stats)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn forget_memory(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -778,6 +796,7 @@ async fn forget_memory(
     Ok(Json(json!({ "id": id, "status": "forgotten" })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn archive_memory(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -787,6 +806,7 @@ async fn archive_memory(
     Ok(Json(json!({ "id": id, "status": "archived" })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn unarchive_memory(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -796,6 +816,7 @@ async fn unarchive_memory(
     Ok(Json(json!({ "id": id, "status": "active" })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn get_links(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -806,6 +827,7 @@ async fn get_links(
     Ok(Json(json!({ "links": links })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn version_chain_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,

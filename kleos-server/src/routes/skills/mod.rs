@@ -144,6 +144,7 @@ fn llm_routes() -> Router<AppState> {
 // CRUD handlers
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn create_skill_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -154,6 +155,7 @@ async fn create_skill_handler(
     Ok((StatusCode::CREATED, Json(json!(skill))))
 }
 
+#[tracing::instrument(skip_all)]
 async fn list_skills_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -168,6 +170,7 @@ async fn list_skills_handler(
     ))
 }
 
+#[tracing::instrument(skip_all)]
 async fn search_skills_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -178,6 +181,7 @@ async fn search_skills_handler(
     Ok(Json(json!({ "results": results, "count": results.len() })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn get_skill_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -187,6 +191,7 @@ async fn get_skill_handler(
     Ok(Json(json!(skill)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn delete_skill_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -196,6 +201,7 @@ async fn delete_skill_handler(
     Ok(Json(json!({ "deleted": true, "id": id })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn update_skill_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -206,6 +212,7 @@ async fn update_skill_handler(
     Ok(Json(json!(skill)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn recompute_skill_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -222,6 +229,7 @@ async fn recompute_skill_handler(
 // Execution handlers
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn record_execution_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -244,6 +252,7 @@ async fn record_execution_handler(
     ))
 }
 
+#[tracing::instrument(skip_all)]
 async fn get_executions_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -261,6 +270,7 @@ async fn get_executions_handler(
 // Judgment handlers
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn judge_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -279,6 +289,7 @@ async fn judge_handler(
     Ok((StatusCode::CREATED, Json(json!(judgment))))
 }
 
+#[tracing::instrument(skip_all)]
 async fn get_judgments_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -294,6 +305,7 @@ async fn get_judgments_handler(
 // Tags, deps, lineage handlers
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn get_tags_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -303,6 +315,7 @@ async fn get_tags_handler(
     Ok(Json(json!({ "tags": tags })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn get_deps_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -312,6 +325,7 @@ async fn get_deps_handler(
     Ok(Json(json!({ "deps": deps })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn get_lineage_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -326,6 +340,7 @@ async fn get_lineage_handler(
 // ---------------------------------------------------------------------------
 
 // SECURITY: relies on ResolvedDb shard isolation (Phase 5+) to scope to the caller's tenant. Do not add state.db calls here without re-binding auth.
+#[tracing::instrument(skip_all)]
 async fn record_tool_quality_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -347,6 +362,7 @@ async fn record_tool_quality_handler(
 }
 
 // SECURITY: relies on ResolvedDb shard isolation (Phase 5+) to scope to the caller's tenant. Do not add state.db calls here without re-binding auth.
+#[tracing::instrument(skip_all)]
 async fn get_tool_quality_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -361,6 +377,7 @@ async fn get_tool_quality_handler(
 // ---------------------------------------------------------------------------
 
 // SECURITY: relies on ResolvedDb shard isolation (Phase 5+) to scope to the caller's tenant. Do not add state.db calls here without re-binding auth.
+#[tracing::instrument(skip_all)]
 async fn health_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -369,6 +386,7 @@ async fn health_handler(
     Ok(Json(health))
 }
 
+#[tracing::instrument(skip_all)]
 async fn overview_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -377,6 +395,7 @@ async fn overview_handler(
     Ok(Json(json!(overview)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn stats_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -388,6 +407,7 @@ async fn stats_handler(
     Ok(Json(json!({ "stats": stats, "count": stats.len() })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn detail_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -402,6 +422,7 @@ async fn detail_handler(
 // Evolution handlers (hybrid: need state.llm for LLM-driven transforms)
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn evolve_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -413,6 +434,7 @@ async fn evolve_handler(
     Ok(Json(json!(result)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn fix_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -424,6 +446,7 @@ async fn fix_handler(
     Ok(Json(json!(result)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn derive_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -444,6 +467,7 @@ async fn derive_handler(
     Ok(Json(json!(result)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn capture_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -456,6 +480,7 @@ async fn capture_handler(
     Ok(Json(json!(result)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn evolution_recent_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -471,6 +496,7 @@ async fn evolution_recent_handler(
 // Analyzer handlers
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn usage_stats_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -483,6 +509,7 @@ async fn usage_stats_handler(
 // Cloud handlers (no DB access, just external HTTP)
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn cloud_search_handler(
     Auth(_auth): Auth,
     Json(body): Json<CloudSearchBody>,
@@ -492,6 +519,7 @@ async fn cloud_search_handler(
     Ok(Json(json!({ "results": results, "count": results.len() })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn cloud_upload_handler(
     Auth(_auth): Auth,
     Json(body): Json<CloudUploadBody>,
@@ -515,6 +543,7 @@ async fn cloud_upload_handler(
 /// Sync skills from filesystem directories.
 /// Note: In the Rust version, skills are primarily stored in the database.
 /// This endpoint scans specified directories for skill files and imports them.
+#[tracing::instrument(skip_all)]
 async fn sync_skills_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -606,6 +635,7 @@ async fn sync_skills_handler(
 
 /// Execute a task using relevant skills as context.
 /// Hybrid: needs state.llm for prompt completion.
+#[tracing::instrument(skip_all)]
 async fn execute_skills_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -664,6 +694,7 @@ async fn execute_skills_handler(
 }
 
 /// Upload a skill from a local directory to the cloud.
+#[tracing::instrument(skip_all)]
 async fn upload_skill_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,

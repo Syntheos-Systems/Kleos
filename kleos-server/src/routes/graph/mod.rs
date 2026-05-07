@@ -101,6 +101,7 @@ pub fn router() -> Router<AppState> {
 // POST /entities
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn create_entity_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -138,6 +139,7 @@ async fn create_entity_handler(
 // GET /entities
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn list_entities_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -175,6 +177,7 @@ async fn list_entities_handler(
 // GET /entities/{id}
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn get_entity_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -209,6 +212,7 @@ async fn get_entity_handler(
 // PUT /entities/{id}
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn update_entity_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -238,6 +242,7 @@ async fn update_entity_handler(
 // DELETE /entities/{id}
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn delete_entity_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -259,6 +264,7 @@ async fn delete_entity_handler(
 // GET /entities/{id}/relationships
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn entity_relationships_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -325,6 +331,7 @@ async fn entity_relationships_handler(
 // DELETE /entities/{id}/relationships
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn delete_relationship_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -353,6 +360,7 @@ async fn delete_relationship_handler(
 // GET /entities/{id}/memories
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn entity_memories_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -385,6 +393,7 @@ async fn entity_memories_handler(
 // POST /entities/{id}/search
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn entity_search_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -408,6 +417,7 @@ async fn entity_search_handler(
 // PUT /entities/{id}/memories/{mid}
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn link_entity_memory_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -427,6 +437,7 @@ async fn link_entity_memory_handler(
 // DELETE /entities/{id}/memories/{mid}
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn unlink_entity_memory_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -446,6 +457,7 @@ async fn unlink_entity_memory_handler(
 // POST /entity-relationships
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn create_relationship_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -504,6 +516,7 @@ async fn create_relationship_handler(
 // GET /graph  (accepts ?limit=N or ?max=N for GUI compat, ?depth= is accepted but unused)
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn graph_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -533,6 +546,7 @@ async fn graph_handler(
 // GET /graph/raw
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn graph_raw_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -554,6 +568,7 @@ async fn graph_raw_handler(
 // GET /graph/view
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn graph_view_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -575,6 +590,7 @@ async fn graph_view_handler(
 // POST /graph/build
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn build_graph_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -600,6 +616,7 @@ async fn build_graph_handler(
 // POST /graph/search
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn graph_search_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -614,6 +631,7 @@ async fn graph_search_handler(
 // GET /graph/neighborhood/{id}
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn neighborhood_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -646,6 +664,7 @@ async fn neighborhood_handler(
 // GET /memory/{id}/entities
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn memory_entities_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -695,6 +714,7 @@ async fn memory_entities_handler(
 // GET /communities
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn communities_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -747,6 +767,7 @@ async fn communities_handler(
 // GET /communities/{id}
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn community_detail_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -770,6 +791,7 @@ async fn community_detail_handler(
 // POST /graph/communities
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn detect_communities_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -784,6 +806,7 @@ async fn detect_communities_handler(
 // GET /graph/communities/{id}/members
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn community_members_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -801,6 +824,7 @@ async fn community_members_handler(
 // GET /graph/communities/stats
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn community_stats_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -815,6 +839,7 @@ async fn community_stats_handler(
 // POST /graph/pagerank
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn pagerank_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -829,6 +854,7 @@ async fn pagerank_handler(
 // POST /graph/cooccurrences/rebuild
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn rebuild_cooccurrences_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -843,6 +869,7 @@ async fn rebuild_cooccurrences_handler(
 // GET /entities/{id}/cooccurrences
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn entity_cooccurrences_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -861,6 +888,7 @@ async fn entity_cooccurrences_handler(
 // ---------------------------------------------------------------------------
 
 // SECURITY: relies on ResolvedDb shard isolation (Phase 5+) to scope to the caller's tenant. Do not add state.db calls here without re-binding auth.
+#[tracing::instrument(skip_all)]
 async fn facts_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,

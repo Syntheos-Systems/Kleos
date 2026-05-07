@@ -189,6 +189,7 @@ pub fn router() -> Router<AppState> {
 // H-R3-002: dreamer stats are operator-wide telemetry (one shared dreamer
 // task across all tenants); no tenant data touched, so Auth(_auth) is
 // intentional.
+#[tracing::instrument(skip_all)]
 async fn dreamer_stats_handler(
     State(state): State<AppState>,
     Auth(_auth): Auth,
@@ -201,6 +202,7 @@ async fn dreamer_stats_handler(
 // Consolidation
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn consolidate_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -215,6 +217,7 @@ async fn consolidate_handler(
     Ok((StatusCode::CREATED, Json(json!(result))))
 }
 
+#[tracing::instrument(skip_all)]
 async fn candidates_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -225,6 +228,7 @@ async fn candidates_handler(
     Ok(Json(json!({ "groups": groups })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn list_consolidations_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -239,6 +243,7 @@ async fn list_consolidations_handler(
 // Contradiction
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn contradictions_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -249,6 +254,7 @@ async fn contradictions_handler(
     Ok(Json(json!({ "contradictions": contradictions })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn scan_contradictions_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -261,6 +267,7 @@ async fn scan_contradictions_handler(
 // Decomposition
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn decompose_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -274,6 +281,7 @@ async fn decompose_handler(
 // Temporal
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn detect_temporal_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -287,6 +295,7 @@ async fn detect_temporal_handler(
     Ok(Json(json!({ "patterns": patterns })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn list_temporal_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -302,6 +311,7 @@ async fn list_temporal_handler(
 // Digests
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn generate_digest_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -312,6 +322,7 @@ async fn generate_digest_handler(
     Ok((StatusCode::CREATED, Json(json!(digest))))
 }
 
+#[tracing::instrument(skip_all)]
 async fn list_digests_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -326,6 +337,7 @@ async fn list_digests_handler(
 // Reflections
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn create_reflection_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -345,6 +357,7 @@ async fn create_reflection_handler(
     Ok((StatusCode::CREATED, Json(json!(reflection))))
 }
 
+#[tracing::instrument(skip_all)]
 async fn list_reflections_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -356,6 +369,7 @@ async fn list_reflections_handler(
 }
 
 // Hybrid: needs state.llm for LLM-driven generation.
+#[tracing::instrument(skip_all)]
 async fn generate_reflections_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -372,6 +386,7 @@ async fn generate_reflections_handler(
 // Causal
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn create_chain_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -387,6 +402,7 @@ async fn create_chain_handler(
     Ok((StatusCode::CREATED, Json(json!(chain))))
 }
 
+#[tracing::instrument(skip_all)]
 async fn list_chains_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -397,6 +413,7 @@ async fn list_chains_handler(
     Ok(Json(json!({ "chains": items })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn get_chain_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -406,6 +423,7 @@ async fn get_chain_handler(
     Ok(Json(json!(chain)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn add_link_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -426,6 +444,7 @@ async fn add_link_handler(
     Ok((StatusCode::CREATED, Json(json!(link))))
 }
 
+#[tracing::instrument(skip_all)]
 async fn causal_backward_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -443,6 +462,7 @@ async fn causal_backward_handler(
 // Sentiment
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn sentiment_analyze_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -477,6 +497,7 @@ async fn sentiment_analyze_handler(
     })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn sentiment_history_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -524,6 +545,7 @@ async fn sentiment_history_handler(
 // Valence
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn valence_score_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -543,6 +565,7 @@ async fn valence_score_handler(
     }
 }
 
+#[tracing::instrument(skip_all)]
 async fn valence_get_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -557,6 +580,7 @@ async fn valence_get_handler(
     })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn valence_profile_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -569,6 +593,7 @@ async fn valence_profile_handler(
 // Predictive
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn predictive_recall_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -577,6 +602,7 @@ async fn predictive_recall_handler(
     Ok(Json(json!(context)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn predictive_patterns_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -589,6 +615,7 @@ async fn predictive_patterns_handler(
     Ok(Json(json!({ "patterns": patterns })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn predictive_sequences_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -605,6 +632,7 @@ async fn predictive_sequences_handler(
 // Reconsolidation
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn reconsolidate_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -614,6 +642,7 @@ async fn reconsolidate_handler(
     Ok(Json(json!(result)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn reconsolidation_candidates_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -628,6 +657,7 @@ async fn reconsolidation_candidates_handler(
 // Extraction
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn extract_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -676,6 +706,7 @@ async fn extract_handler(
 // Time Travel
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn time_travel_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -701,6 +732,7 @@ async fn time_travel_handler(
 // Sweep
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn sweep_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -715,6 +747,7 @@ async fn sweep_handler(
 // Correct
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn correct_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -735,6 +768,7 @@ async fn correct_handler(
 // Memory Health
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn memory_health_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -747,6 +781,7 @@ async fn memory_health_handler(
 // Feedback
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn feedback_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -756,6 +791,7 @@ async fn feedback_handler(
     Ok((StatusCode::CREATED, Json(json!({ "ok": true }))))
 }
 
+#[tracing::instrument(skip_all)]
 async fn feedback_stats_handler(
     Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -768,6 +804,7 @@ async fn feedback_stats_handler(
 // Duplicates
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn duplicates_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -779,6 +816,7 @@ async fn duplicates_handler(
     Ok(Json(json!({ "duplicates": pairs, "count": pairs.len() })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn deduplicate_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -794,6 +832,7 @@ async fn deduplicate_handler(
 // Dream (Eidolon integration -- graceful degradation)
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn run_pipeline_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
@@ -804,6 +843,7 @@ async fn run_pipeline_handler(
 
 // H-R3-001: shadow path of /brain/dream. Both must require admin scope or
 // the gate on the other endpoint is meaningless.
+#[tracing::instrument(skip_all)]
 async fn dream_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,

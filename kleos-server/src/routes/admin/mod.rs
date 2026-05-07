@@ -199,6 +199,7 @@ fn record_bootstrap_failure() {
     throttle.failures = throttle.failures.saturating_add(1);
 }
 
+#[tracing::instrument(skip_all)]
 async fn bootstrap(
     State(state): State<AppState>,
     body: Option<Json<BootstrapBody>>,
@@ -322,6 +323,7 @@ async fn bootstrap(
 // Stats
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn get_stats(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -342,6 +344,7 @@ async fn get_stats(
 // Settings (app_state key-value)
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn get_settings(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -355,6 +358,7 @@ async fn get_settings(
     Ok(Json(Value::Object(map)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn put_settings(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -377,6 +381,7 @@ async fn put_settings(
 // GC
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_gc(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -392,6 +397,7 @@ async fn admin_gc(
 // Compact
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_compact(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -405,6 +411,7 @@ async fn admin_compact(
 // Re-embed
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_reembed(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -420,6 +427,7 @@ async fn admin_reembed(
 // Rebuild FTS
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_rebuild_fts(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -433,6 +441,7 @@ async fn admin_rebuild_fts(
 // Refresh cache (no-op signal)
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn refresh_cache(
     State(_state): State<AppState>,
     Auth(auth): Auth,
@@ -447,6 +456,7 @@ async fn refresh_cache(
 // Backfill facts
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn backfill_facts(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -473,6 +483,7 @@ async fn backfill_facts(
 // Schema
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_schema(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -486,6 +497,7 @@ async fn admin_schema(
 // Embedding info
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn embedding_info(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -502,6 +514,7 @@ async fn embedding_info(
 // Scale report
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn scale_report_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -515,6 +528,7 @@ async fn scale_report_handler(
 // Cold storage stats
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn cold_storage_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -529,6 +543,7 @@ async fn cold_storage_handler(
 // Providers
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_providers(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -555,6 +570,7 @@ async fn admin_providers(
 // Tasks (job queue stats)
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_tasks(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -564,6 +580,7 @@ async fn admin_tasks(
     to_json(stats)
 }
 
+#[tracing::instrument(skip_all)]
 async fn admin_cred_resolve(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -614,6 +631,7 @@ async fn admin_cred_resolve(
     })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn admin_cred_proxy(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -639,6 +657,7 @@ async fn admin_cred_proxy(
 // Maintenance
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn get_maintenance_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -648,6 +667,7 @@ async fn get_maintenance_handler(
     to_json(result)
 }
 
+#[tracing::instrument(skip_all)]
 async fn post_maintenance_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -663,6 +683,7 @@ async fn post_maintenance_handler(
 // SLA
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_sla(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -672,6 +693,7 @@ async fn admin_sla(
     to_json(result)
 }
 
+#[tracing::instrument(skip_all)]
 async fn admin_sla_reset(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -686,6 +708,7 @@ async fn admin_sla_reset(
 // Quotas
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn get_quotas(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -710,6 +733,7 @@ async fn get_quotas(
     Ok(Json(json!(result)))
 }
 
+#[tracing::instrument(skip_all)]
 async fn put_quotas(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -724,6 +748,7 @@ async fn put_quotas(
 // Usage + Tenants
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_usage(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -733,6 +758,7 @@ async fn admin_usage(
     to_json(rows)
 }
 
+#[tracing::instrument(skip_all)]
 async fn admin_tenants(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -746,6 +772,7 @@ async fn admin_tenants(
 // Provision / Deprovision
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn provision_tenant(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -763,6 +790,7 @@ async fn provision_tenant(
     Ok((StatusCode::CREATED, json_result))
 }
 
+#[tracing::instrument(skip_all)]
 async fn deprovision_tenant(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -777,6 +805,7 @@ async fn deprovision_tenant(
 // Checkpoint / Backup verify
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn checkpoint_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -786,6 +815,7 @@ async fn checkpoint_handler(
     Ok(Json(result))
 }
 
+#[tracing::instrument(skip_all)]
 async fn backup_verify_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -799,6 +829,7 @@ async fn backup_verify_handler(
 // Backup download
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn backup_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -958,6 +989,7 @@ fn sanitize_pitr_dest(data_dir: &str, raw: &str) -> Result<std::path::PathBuf, A
     Ok(candidate)
 }
 
+#[tracing::instrument(skip_all)]
 async fn admin_pitr_snapshots(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -969,6 +1001,7 @@ async fn admin_pitr_snapshots(
     Ok(Json(json!({ "snapshots": snapshots })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn admin_pitr_prepare(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -996,6 +1029,7 @@ async fn admin_pitr_prepare(
 // Export (user-scoped, any authenticated user)
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn export_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1022,6 +1056,7 @@ async fn export_handler(
 // "DELETE FROM memories" with no predicate against the monolith. Operators
 // reading the JSON saw user_id and assumed scope; they got cross-tenant
 // destruction.
+#[tracing::instrument(skip_all)]
 async fn reset_user(
     Auth(auth): Auth,
     crate::extractors::ResolvedDb(db): crate::extractors::ResolvedDb,
@@ -1061,6 +1096,7 @@ async fn reset_user(
 // Communities + Cooccurrences
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn detect_communities_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1070,6 +1106,7 @@ async fn detect_communities_handler(
     to_json(result)
 }
 
+#[tracing::instrument(skip_all)]
 async fn rebuild_cooccurrences_handler(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1083,6 +1120,7 @@ async fn rebuild_cooccurrences_handler(
 // PageRank rebuild
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_vector_sync_replay(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1098,6 +1136,7 @@ async fn admin_vector_sync_replay(
 // Rebuild ANN index (IVF_HNSW_PQ)
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_vector_rebuild_index(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1127,6 +1166,7 @@ async fn admin_vector_rebuild_index(
 // Vector health diagnostic
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_vector_health(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1234,6 +1274,7 @@ async fn admin_vector_health(
 // Chunk + embedding backfill
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_backfill_chunks(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1315,6 +1356,7 @@ async fn admin_backfill_chunks(
 // Safe mode exit
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn post_safe_mode_exit(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1326,6 +1368,7 @@ async fn post_safe_mode_exit(
     Ok(Json(json!({ "safe_mode": false })))
 }
 
+#[tracing::instrument(skip_all)]
 async fn admin_pagerank_rebuild(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1361,6 +1404,7 @@ async fn admin_pagerank_rebuild(
 // ---------------------------------------------------------------------------
 
 /// GET /admin/migrations -- return current migration status (version, pending, revertible).
+#[tracing::instrument(skip_all)]
 async fn admin_migration_status(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1372,6 +1416,7 @@ async fn admin_migration_status(
 
 /// POST /admin/migrations/down -- roll the schema back to target_version.
 /// When dry_run is true, returns the plan without executing.
+#[tracing::instrument(skip_all)]
 async fn admin_migrate_down(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1384,6 +1429,7 @@ async fn admin_migrate_down(
     to_json(plan)
 }
 
+#[tracing::instrument(skip_all)]
 async fn admin_reapply_instincts(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1405,6 +1451,7 @@ async fn admin_reapply_instincts(
 // Monolith drain -- move data from system DB to tenant shards
 // ---------------------------------------------------------------------------
 
+#[tracing::instrument(skip_all)]
 async fn admin_monolith_status(
     State(state): State<AppState>,
     Auth(auth): Auth,
@@ -1497,6 +1544,7 @@ const MONOLITH_DRAIN_COLUMNS: &str = "\
     fsrs_last_review_at, is_superseded, is_consolidated, \
     valence, arousal, dominant_emotion, created_at, updated_at";
 
+#[tracing::instrument(skip_all)]
 async fn admin_monolith_drain(
     State(state): State<AppState>,
     Auth(auth): Auth,
