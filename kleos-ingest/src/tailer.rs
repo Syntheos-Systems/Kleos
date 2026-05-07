@@ -25,7 +25,7 @@ pub fn parse_session_path(path: &Path) -> Option<(String, String)> {
 
 pub async fn tail_file(
     path: PathBuf,
-    config: Arc<Config>,
+    _config: Arc<Config>,
     ledger: Arc<Ledger>,
     writer: Arc<Mutex<KleosWriter>>,
 ) {

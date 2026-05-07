@@ -5,6 +5,7 @@ pub struct Config {
     pub kleos_url: String,
     pub api_key: Option<String>,
     pub summary_idle_secs: u64,
+    #[expect(dead_code)]
     pub novelty_drop_threshold: f64,
     pub ledger_path: PathBuf,
     pub host: String,
