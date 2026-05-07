@@ -94,6 +94,8 @@ fn bench_search_tiers(c: &mut Criterion) {
             include_links: false,
             latest_only: true,
             source_filter: None,
+            include_archived: None,
+            include_noise: None,
         };
 
         group.throughput(Throughput::Elements(1));
@@ -131,6 +133,8 @@ fn cold_request_pool() -> Vec<SearchRequest> {
             include_links: false,
             latest_only: true,
             source_filter: None,
+            include_archived: None,
+            include_noise: None,
         })
         .collect()
 }
@@ -193,6 +197,8 @@ fn bench_search_tiers_vector(c: &mut Criterion) {
                 include_links: false,
                 latest_only: true,
                 source_filter: None,
+                include_archived: None,
+                include_noise: None,
             })
             .collect();
         let cursor = AtomicUsize::new(0);

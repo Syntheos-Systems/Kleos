@@ -936,6 +936,8 @@ mod tests {
             include_links: false,
             latest_only: true,
             source_filter: None,
+            include_archived: None,
+            include_noise: None,
         }
     }
 
