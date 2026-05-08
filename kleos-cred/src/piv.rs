@@ -273,6 +273,9 @@ pub fn ecdh_agree(slot: PivSlot, peer_pubkey_pem: &str) -> Result<[u8; 32]> {
         )));
     }
 
+    let yk_serial = std::env::var("YKSERIAL").unwrap_or_default();
+    let piv_pin = std::env::var("PIV_PIN").unwrap_or_else(|_| "123456".to_string());
+
     let script = format!(
         r#"
 import sys, base64
@@ -284,17 +287,36 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key
 peer_pem = sys.stdin.buffer.read()
 peer = load_pem_public_key(peer_pem)
 
+target_serial = "{yk_serial}" if "{yk_serial}" else None
+piv_pin = "{piv_pin}"
+
 devices = list_all_devices()
 if not devices:
     print("no yubikey detected", file=sys.stderr); sys.exit(2)
 
-dev, _info = devices[0]
+dev, info = None, None
+if target_serial:
+    for d, i in devices:
+        if str(i.serial) == target_serial:
+            dev, info = d, i
+            break
+    if dev is None:
+        print(f"YubiKey with serial {{target_serial}} not found", file=sys.stderr); sys.exit(2)
+else:
+    if len(devices) > 1:
+        serials = ", ".join(str(i.serial) for _, i in devices)
+        print(f"multiple YubiKeys detected ({{serials}}), set YKSERIAL to pick one", file=sys.stderr); sys.exit(2)
+    dev, info = devices[0]
+
 with dev.open_connection(SmartCardConnection) as conn:
     session = PivSession(conn)
+    session.verify_pin(piv_pin)
     shared = session.calculate_secret(SLOT.{slot}, peer)
     sys.stdout.write(base64.b16encode(shared).decode().lower())
 "#,
         slot = slot.yubikit_name(),
+        yk_serial = yk_serial,
+        piv_pin = piv_pin,
     );
 
     let mut child = Command::new("python3")

@@ -346,10 +346,21 @@ fn config_dir() -> PathBuf {
 // subprocess helpers
 // ---------------------------------------------------------------------------
 
+/// Get device selection args if YKSERIAL is set.
+fn device_args() -> Vec<String> {
+    match std::env::var("YKSERIAL") {
+        Ok(serial) if !serial.is_empty() => vec!["--device".to_string(), serial],
+        _ => vec![],
+    }
+}
+
 #[cfg(windows)]
 fn try_ykman_calculate_win(challenge_hex: &str) -> Result<String> {
+    let mut args = device_args();
+    args.extend(["otp".to_string(), "calculate".to_string(), SLOT.to_string(), challenge_hex.to_string()]);
+
     let out = Command::new("ykman")
-        .args(["otp", "calculate", &SLOT.to_string(), challenge_hex])
+        .args(&args)
         .output()
         .map_err(|e| {
             CredError::YubiKey(format!(
@@ -371,8 +382,11 @@ fn try_ykman_calculate_win(challenge_hex: &str) -> Result<String> {
 
 #[cfg(not(windows))]
 fn try_ykman_calculate(challenge_hex: &str) -> Result<String> {
+    let mut args = device_args();
+    args.extend(["otp".to_string(), "calculate".to_string(), SLOT.to_string(), challenge_hex.to_string()]);
+
     let out = Command::new("ykman")
-        .args(["otp", "calculate", &SLOT.to_string(), challenge_hex])
+        .args(&args)
         .output()
         .map_err(|e| {
             CredError::YubiKey(format!(
@@ -398,19 +412,26 @@ fn try_python_ykman_calculate(challenge_hex: &str) -> Result<String> {
     const SCRIPT: &str = r#"
 import os, sys
 from ykman._cli.__main__ import main
+device = os.environ.get("YKMAN_DEVICE", "")
 arg1 = os.environ.get("YKMAN_ARG_1", "")
 arg2 = os.environ.get("YKMAN_ARG_2", "")
-sys.argv = ['ykman', 'otp', 'calculate', arg1, arg2]
+argv = ['ykman']
+if device:
+    argv.extend(['--device', device])
+argv.extend(['otp', 'calculate', arg1, arg2])
+sys.argv = argv
 main()
 "#;
 
+    let yk_serial = std::env::var("YKSERIAL").unwrap_or_default();
     let out = Command::new("sudo")
         .args([
-            "--preserve-env=YKMAN_ARG_1,YKMAN_ARG_2",
+            "--preserve-env=YKMAN_DEVICE,YKMAN_ARG_1,YKMAN_ARG_2",
             "python3",
             "-c",
             SCRIPT,
         ])
+        .env("YKMAN_DEVICE", &yk_serial)
         .env("YKMAN_ARG_1", SLOT.to_string())
         .env("YKMAN_ARG_2", challenge_hex)
         .output()
@@ -429,8 +450,11 @@ main()
 
 #[cfg(not(windows))]
 fn try_ykman_program(secret_hex: &str) -> Result<String> {
+    let mut args = device_args();
+    args.extend(["otp".to_string(), "chalresp".to_string(), SLOT.to_string(), "--force".to_string(), secret_hex.to_string()]);
+
     let out = Command::new("ykman")
-        .args(["otp", "chalresp", &SLOT.to_string(), "--force", secret_hex])
+        .args(&args)
         .output()
         .map_err(|e| CredError::YubiKey(format!("ykman not found: {}", e)))?;
 
@@ -451,19 +475,26 @@ fn try_python_ykman_program(secret_hex: &str) -> Result<String> {
     const SCRIPT: &str = r#"
 import os, sys
 from ykman._cli.__main__ import main
+device = os.environ.get("YKMAN_DEVICE", "")
 arg1 = os.environ.get("YKMAN_ARG_1", "")
 arg2 = os.environ.get("YKMAN_ARG_2", "")
-sys.argv = ['ykman', 'otp', 'chalresp', arg1, '--force', arg2]
+argv = ['ykman']
+if device:
+    argv.extend(['--device', device])
+argv.extend(['otp', 'chalresp', arg1, '--force', arg2])
+sys.argv = argv
 main()
 "#;
 
+    let yk_serial = std::env::var("YKSERIAL").unwrap_or_default();
     let out = Command::new("sudo")
         .args([
-            "--preserve-env=YKMAN_ARG_1,YKMAN_ARG_2",
+            "--preserve-env=YKMAN_DEVICE,YKMAN_ARG_1,YKMAN_ARG_2",
             "python3",
             "-c",
             SCRIPT,
         ])
+        .env("YKMAN_DEVICE", &yk_serial)
         .env("YKMAN_ARG_1", SLOT.to_string())
         .env("YKMAN_ARG_2", secret_hex)
         .output()
@@ -482,8 +513,11 @@ main()
 
 #[cfg(not(windows))]
 fn try_ykman_delete() -> Result<String> {
+    let mut args = device_args();
+    args.extend(["otp".to_string(), "delete".to_string(), SLOT.to_string(), "--force".to_string()]);
+
     let out = Command::new("ykman")
-        .args(["otp", "delete", &SLOT.to_string(), "--force"])
+        .args(&args)
         .output()
         .map_err(|e| CredError::YubiKey(format!("ykman not found: {}", e)))?;
 
@@ -504,13 +538,20 @@ fn try_python_ykman_delete() -> Result<String> {
     const SCRIPT: &str = r#"
 import os, sys
 from ykman._cli.__main__ import main
+device = os.environ.get("YKMAN_DEVICE", "")
 arg1 = os.environ.get("YKMAN_ARG_1", "")
-sys.argv = ['ykman', 'otp', 'delete', arg1, '--force']
+argv = ['ykman']
+if device:
+    argv.extend(['--device', device])
+argv.extend(['otp', 'delete', arg1, '--force'])
+sys.argv = argv
 main()
 "#;
 
+    let yk_serial = std::env::var("YKSERIAL").unwrap_or_default();
     let out = Command::new("sudo")
-        .args(["--preserve-env=YKMAN_ARG_1", "python3", "-c", SCRIPT])
+        .args(["--preserve-env=YKMAN_DEVICE,YKMAN_ARG_1", "python3", "-c", SCRIPT])
+        .env("YKMAN_DEVICE", &yk_serial)
         .env("YKMAN_ARG_1", SLOT.to_string())
         .output()
         .map_err(|e| CredError::YubiKey(format!("sudo python3 ykman failed: {}", e)))?;
