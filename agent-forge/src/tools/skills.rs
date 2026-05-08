@@ -29,11 +29,18 @@ pub struct SkillSearchInput {
 
 /// Search Kleos for skills matching `query`, returning up to `limit` results.
 pub fn skill_search(input: SkillSearchInput) -> ToolResult {
-    let query = input.query.ok_or_else(|| ToolError::MissingField("query".into()))?;
+    let query = input
+        .query
+        .ok_or_else(|| ToolError::MissingField("query".into()))?;
     let client = client()?;
-    let result = client.search_skills(&query, input.limit).map_err(kleos_err)?;
+    let result = client
+        .search_skills(&query, input.limit)
+        .map_err(kleos_err)?;
 
-    let skills = result.get("skills").cloned().unwrap_or(serde_json::json!([]));
+    let skills = result
+        .get("skills")
+        .cloned()
+        .unwrap_or(serde_json::json!([]));
     let count = skills.as_array().map(|a| a.len()).unwrap_or(0);
 
     let mut output = Output::ok(format!("Found {} matching skills", count));
@@ -52,17 +59,30 @@ pub struct SkillCaptureInput {
 /// Submit a new skill description to Kleos and return the assigned skill ID.
 /// Rejects descriptions longer than 2000 characters before sending.
 pub fn skill_capture(input: SkillCaptureInput) -> ToolResult {
-    let description = input.description.ok_or_else(|| ToolError::MissingField("description".into()))?;
+    let description = input
+        .description
+        .ok_or_else(|| ToolError::MissingField("description".into()))?;
     if description.len() > 2000 {
-        return Err(ToolError::InvalidValue("description exceeds 2000 char limit".into()));
+        return Err(ToolError::InvalidValue(
+            "description exceeds 2000 char limit".into(),
+        ));
     }
     let client = client()?;
-    let result = client.capture_skill(&description, input.agent.as_deref()).map_err(kleos_err)?;
+    let result = client
+        .capture_skill(&description, input.agent.as_deref())
+        .map_err(kleos_err)?;
 
-    let skill_id = result.get("skill_id").and_then(|v| v.as_i64()).unwrap_or(-1);
-    let message = result.get("message").and_then(|v| v.as_str()).unwrap_or("captured");
+    let skill_id = result
+        .get("skill_id")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(-1);
+    let message = result
+        .get("message")
+        .and_then(|v| v.as_str())
+        .unwrap_or("captured");
 
-    let mut output = Output::ok_with_id(skill_id.to_string(), format!("Skill captured: {}", message));
+    let mut output =
+        Output::ok_with_id(skill_id.to_string(), format!("Skill captured: {}", message));
     output.data = Some(result);
     Ok(output)
 }
@@ -81,16 +101,22 @@ pub struct SkillRecordExecInput {
 /// Record one execution attempt for a skill, including success/failure and
 /// optional timing and error details.
 pub fn skill_record_exec(input: SkillRecordExecInput) -> ToolResult {
-    let skill_id = input.skill_id.ok_or_else(|| ToolError::MissingField("skill_id".into()))?;
-    let success = input.success.ok_or_else(|| ToolError::MissingField("success".into()))?;
+    let skill_id = input
+        .skill_id
+        .ok_or_else(|| ToolError::MissingField("skill_id".into()))?;
+    let success = input
+        .success
+        .ok_or_else(|| ToolError::MissingField("success".into()))?;
     let client = client()?;
-    client.record_execution(
-        skill_id,
-        success,
-        input.duration_ms,
-        input.error_type.as_deref(),
-        input.error_message.as_deref(),
-    ).map_err(kleos_err)?;
+    client
+        .record_execution(
+            skill_id,
+            success,
+            input.duration_ms,
+            input.error_type.as_deref(),
+            input.error_message.as_deref(),
+        )
+        .map_err(kleos_err)?;
 
     Ok(Output::ok(format!(
         "Recorded {} execution for skill #{}",
@@ -110,12 +136,22 @@ pub struct SkillFixInput {
 /// Ask Kleos to create a corrected version of the given skill, optionally
 /// guided by a free-text hint describing what to change.
 pub fn skill_fix(input: SkillFixInput) -> ToolResult {
-    let skill_id = input.skill_id.ok_or_else(|| ToolError::MissingField("skill_id".into()))?;
+    let skill_id = input
+        .skill_id
+        .ok_or_else(|| ToolError::MissingField("skill_id".into()))?;
     let client = client()?;
-    let result = client.fix_skill(skill_id, input.hint.as_deref()).map_err(kleos_err)?;
+    let result = client
+        .fix_skill(skill_id, input.hint.as_deref())
+        .map_err(kleos_err)?;
 
-    let new_id = result.get("skill_id").and_then(|v| v.as_i64()).unwrap_or(-1);
-    let message = result.get("message").and_then(|v| v.as_str()).unwrap_or("fixed");
+    let new_id = result
+        .get("skill_id")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(-1);
+    let message = result
+        .get("message")
+        .and_then(|v| v.as_str())
+        .unwrap_or("fixed");
 
     let mut output = Output::ok_with_id(new_id.to_string(), format!("Skill fixed: {}", message));
     output.data = Some(result);
@@ -134,19 +170,35 @@ pub struct SkillDeriveInput {
 /// Derive a new skill from one or more parents using the given direction prompt.
 /// Requires at least one parent ID and a direction no longer than 2000 characters.
 pub fn skill_derive(input: SkillDeriveInput) -> ToolResult {
-    let parent_ids = input.parent_ids.ok_or_else(|| ToolError::MissingField("parent_ids".into()))?;
+    let parent_ids = input
+        .parent_ids
+        .ok_or_else(|| ToolError::MissingField("parent_ids".into()))?;
     if parent_ids.is_empty() {
-        return Err(ToolError::InvalidValue("at least one parent_id required".into()));
+        return Err(ToolError::InvalidValue(
+            "at least one parent_id required".into(),
+        ));
     }
-    let direction = input.direction.ok_or_else(|| ToolError::MissingField("direction".into()))?;
+    let direction = input
+        .direction
+        .ok_or_else(|| ToolError::MissingField("direction".into()))?;
     if direction.len() > 2000 {
-        return Err(ToolError::InvalidValue("direction exceeds 2000 char limit".into()));
+        return Err(ToolError::InvalidValue(
+            "direction exceeds 2000 char limit".into(),
+        ));
     }
     let client = client()?;
-    let result = client.derive_skill(&parent_ids, &direction, input.agent.as_deref()).map_err(kleos_err)?;
+    let result = client
+        .derive_skill(&parent_ids, &direction, input.agent.as_deref())
+        .map_err(kleos_err)?;
 
-    let new_id = result.get("skill_id").and_then(|v| v.as_i64()).unwrap_or(-1);
-    let message = result.get("message").and_then(|v| v.as_str()).unwrap_or("derived");
+    let new_id = result
+        .get("skill_id")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(-1);
+    let message = result
+        .get("message")
+        .and_then(|v| v.as_str())
+        .unwrap_or("derived");
 
     let mut output = Output::ok_with_id(new_id.to_string(), format!("Skill derived: {}", message));
     output.data = Some(result);
@@ -162,7 +214,9 @@ pub struct SkillLineageInput {
 
 /// Fetch the full ancestor/descendant lineage graph for the given skill ID.
 pub fn skill_lineage(input: SkillLineageInput) -> ToolResult {
-    let skill_id = input.skill_id.ok_or_else(|| ToolError::MissingField("skill_id".into()))?;
+    let skill_id = input
+        .skill_id
+        .ok_or_else(|| ToolError::MissingField("skill_id".into()))?;
     let client = client()?;
     let result = client.get_lineage(skill_id).map_err(kleos_err)?;
 

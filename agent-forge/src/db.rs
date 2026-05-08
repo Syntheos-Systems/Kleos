@@ -118,23 +118,21 @@ impl Database {
 
         if !has_column("hypotheses", "spec_id") {
             self.conn.execute_batch(
-                "ALTER TABLE hypotheses ADD COLUMN spec_id TEXT REFERENCES specs(id);"
+                "ALTER TABLE hypotheses ADD COLUMN spec_id TEXT REFERENCES specs(id);",
             )?;
         }
         if !has_column("session_learns", "spec_id") {
             self.conn.execute_batch(
-                "ALTER TABLE session_learns ADD COLUMN spec_id TEXT REFERENCES specs(id);"
+                "ALTER TABLE session_learns ADD COLUMN spec_id TEXT REFERENCES specs(id);",
             )?;
         }
         if !has_column("specs", "completed_at") {
-            self.conn.execute_batch(
-                "ALTER TABLE specs ADD COLUMN completed_at INTEGER;"
-            )?;
+            self.conn
+                .execute_batch("ALTER TABLE specs ADD COLUMN completed_at INTEGER;")?;
         }
         if !has_column("specs", "status_note") {
-            self.conn.execute_batch(
-                "ALTER TABLE specs ADD COLUMN status_note TEXT;"
-            )?;
+            self.conn
+                .execute_batch("ALTER TABLE specs ADD COLUMN status_note TEXT;")?;
         }
         Ok(())
     }

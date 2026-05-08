@@ -186,13 +186,20 @@ pub fn verify(db: &Database, input: VerifyInput) -> ToolResult {
             let err_msg = if all_passed {
                 None
             } else {
-                results.iter().find(|r| !r.success).map(|r| r.stderr.as_str())
+                results
+                    .iter()
+                    .find(|r| !r.success)
+                    .map(|r| r.stderr.as_str())
             };
             let _ = client.record_execution(
                 sid,
                 all_passed,
                 Some(total_duration_ms as f64),
-                if all_passed { None } else { Some("verify_failed") },
+                if all_passed {
+                    None
+                } else {
+                    Some("verify_failed")
+                },
                 err_msg.filter(|s| !s.trim().is_empty()),
             );
         }

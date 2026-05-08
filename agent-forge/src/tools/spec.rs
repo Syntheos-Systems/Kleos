@@ -177,7 +177,9 @@ pub struct ListSpecsInput {
 pub fn list_specs(db: &Database, input: ListSpecsInput) -> ToolResult {
     let limit = input.limit.unwrap_or(20);
 
-    let (query, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(ref status) = input.status {
+    let (query, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(ref status) =
+        input.status
+    {
         (
             "SELECT id, task_description, task_type, status, created_at, completed_at, status_note FROM specs WHERE status = ?1 ORDER BY created_at DESC LIMIT ?2",
             vec![Box::new(status.clone()), Box::new(limit as i64)],

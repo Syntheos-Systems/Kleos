@@ -213,7 +213,10 @@ fn apply_pragmas(
         // rusqlite's pragma_update() wraps the value in single quotes, turning
         // the x'...' hex literal into a passphrase string. Use execute_batch()
         // to emit the raw SQL without quoting.
-        let mut key_sql = format!("PRAGMA key = {};", crate::encryption::format_pragma_key(key));
+        let mut key_sql = format!(
+            "PRAGMA key = {};",
+            crate::encryption::format_pragma_key(key)
+        );
         let pragma_result = conn.execute_batch(&key_sql);
         use zeroize::Zeroize;
         key_sql.zeroize();
@@ -290,10 +293,7 @@ fn migrate_legacy_passphrase_to_raw_hex(
     // quotes with internal ' doubled: PRAGMA key = 'x''<hex>'''. SQLCipher
     // received the passphrase x'<hex>' and derived the key via PBKDF2.
     let legacy_passphrase = format!("x'{hex_str}'");
-    let mut legacy_key_sql = format!(
-        "PRAGMA key = '{}';",
-        legacy_passphrase.replace('\'', "''")
-    );
+    let mut legacy_key_sql = format!("PRAGMA key = '{}';", legacy_passphrase.replace('\'', "''"));
 
     let conn = deadpool_sqlite::rusqlite::Connection::open(db_path).map_err(|e| {
         EngError::DatabaseMessage(format!("failed to open {db_path} for rekey: {e}"))
@@ -315,9 +315,8 @@ fn migrate_legacy_passphrase_to_raw_hex(
 
     // Rekey to raw hex mode
     let mut rekey_sql = format!("PRAGMA rekey = {};", &raw_key_pragma);
-    conn.execute_batch(&rekey_sql).map_err(|e| {
-        EngError::DatabaseMessage(format!("PRAGMA rekey failed on {db_path}: {e}"))
-    })?;
+    conn.execute_batch(&rekey_sql)
+        .map_err(|e| EngError::DatabaseMessage(format!("PRAGMA rekey failed on {db_path}: {e}")))?;
     rekey_sql.zeroize();
 
     tracing::warn!(
@@ -372,17 +371,13 @@ fn migrate_plaintext_to_encrypted(
         })?;
 
     conn.execute_batch("DETACH DATABASE encrypted;")
-        .map_err(|e| {
-            EngError::DatabaseMessage(format!("DETACH failed on {db_path}: {e}"))
-        })?;
+        .map_err(|e| EngError::DatabaseMessage(format!("DETACH failed on {db_path}: {e}")))?;
     drop(conn);
 
     // Backup the plaintext file, then atomic swap.
     let backup_path = format!("{db_path}.plaintext-backup");
     std::fs::rename(db_path, &backup_path).map_err(|e| {
-        EngError::DatabaseMessage(format!(
-            "failed to rename {db_path} -> {backup_path}: {e}"
-        ))
+        EngError::DatabaseMessage(format!("failed to rename {db_path} -> {backup_path}: {e}"))
     })?;
     std::fs::rename(&encrypted_path, db_path).map_err(|e| {
         let _ = std::fs::rename(&backup_path, db_path);
