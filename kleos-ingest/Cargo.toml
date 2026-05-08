@@ -22,4 +22,4 @@ clap = { workspace = true }
 dirs = { workspace = true }
 sha2 = { workspace = true }
 chrono = { workspace = true }
-kleos-lib = { path = "../kleos-lib", version = "0.3.2", features = ["piv"] }
+kleos-lib = { path = "../kleos-lib", version = "0.4.0", features = ["piv"] }
