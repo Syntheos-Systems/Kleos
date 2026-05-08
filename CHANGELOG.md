@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-08
+
 ### Added
 
 - `/search/web` endpoint -- thin proxy over private SearXNG instance with auth, input validation, and normalized response schema
@@ -131,7 +133,8 @@ Initial release. Ground-up Rust rewrite of the [TypeScript Engram](https://githu
 - Single static binary, single SQLite database, local embeddings
 - No cloud dependencies -- runs fully offline
 
-[Unreleased]: https://github.com/Ghost-Frame/Kleos/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/Ghost-Frame/Kleos/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Ghost-Frame/Kleos/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Ghost-Frame/Kleos/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/Ghost-Frame/Kleos/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Ghost-Frame/Kleos/compare/v0.1.0...v0.3.0
