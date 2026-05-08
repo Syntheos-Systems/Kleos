@@ -77,6 +77,15 @@ inherits = "release"
 lto = "thin"
 codegen-units = 16
 
+# Local development release builds. Thin LTO + parallel codegen + keep
+# debuginfo for profiling. Use via: cargo build --profile release-local
+[profile.release-local]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+strip = false
+debug = 1
+
 # Criterion bench builds only need representative optimization, not full
 # fat LTO. Thin LTO keeps hot loops inlined across crates while cutting
 # the bench compile loop from ~5 min to ~1 min on WSL. Runtime numbers
