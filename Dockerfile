@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clang \
     protobuf-compiler \
     libprotobuf-dev \
+    libpcsclite-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the full workspace so Cargo can resolve the dependency graph.
