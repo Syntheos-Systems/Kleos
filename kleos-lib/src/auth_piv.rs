@@ -449,6 +449,7 @@ enum SigningBackend {
     Piv(Mutex<yubikey::YubiKey>),
 }
 
+/// Verify PIV PIN then sign a SHA-256 digest with slot 9A. Nano 5.7.4+ firmware requires PIN before signing.
 #[cfg(feature = "piv")]
 fn piv_verify_and_sign(
     yk: &mut yubikey::YubiKey,
