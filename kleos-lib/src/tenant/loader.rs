@@ -134,7 +134,12 @@ impl TenantLoader {
         // `tenants/<id>/kleos.db`; migration (tenant chain v1+) runs inside
         // `Database::open_tenant`.
         let db_path = tenant_dir.join("kleos.db").to_string_lossy().into_owned();
-        let mut db = Database::open_tenant(&db_path, Some(Arc::clone(&vector_index)), self.encryption_key).await?;
+        let mut db = Database::open_tenant(
+            &db_path,
+            Some(Arc::clone(&vector_index)),
+            self.encryption_key,
+        )
+        .await?;
         db.use_chunk_vector_search = self.use_chunk_vector_search;
         db.chunk_vector_index = chunk_vector_index;
         let db = Arc::new(db);
@@ -271,7 +276,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_resident_count() {
-        let loader = TenantLoader::new(PathBuf::from("/tmp/test"), test_config(), 1024, false, None);
+        let loader =
+            TenantLoader::new(PathBuf::from("/tmp/test"), test_config(), 1024, false, None);
 
         assert_eq!(loader.resident_count().await, 0);
         assert!(!loader.is_loaded("tenant_1").await);

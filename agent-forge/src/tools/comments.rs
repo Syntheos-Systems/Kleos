@@ -40,9 +40,8 @@ pub fn comment_check(_db: &Database, input: CommentCheckInput) -> ToolResult {
     let raw_lines: Vec<&str> = content.lines().collect();
     let (declarations, findings) = match ext {
         "rs" => scan_rust(&raw_lines),
-        "ts" | "tsx" | "js" | "jsx" | "go" | "java" | "kt" | "swift" | "c" | "cpp" | "h" | "hpp" => {
-            scan_c_family(&raw_lines)
-        }
+        "ts" | "tsx" | "js" | "jsx" | "go" | "java" | "kt" | "swift" | "c" | "cpp" | "h"
+        | "hpp" => scan_c_family(&raw_lines),
         "py" => scan_python(&raw_lines),
         _ => (0, Vec::new()),
     };
@@ -50,7 +49,11 @@ pub fn comment_check(_db: &Database, input: CommentCheckInput) -> ToolResult {
     let total = declarations;
     let missing = findings.len();
     let documented = total.saturating_sub(missing);
-    let coverage = if total == 0 { 1.0 } else { documented as f64 / total as f64 };
+    let coverage = if total == 0 {
+        1.0
+    } else {
+        documented as f64 / total as f64
+    };
 
     let summary = if missing == 0 {
         format!("All {} declarations in {} are commented", total, file_path)
@@ -106,8 +109,13 @@ fn scan_rust(lines: &[&str]) -> (usize, Vec<Finding>) {
 
 /// Classify a Rust line: which top-level declaration kind, if any, does it open?
 fn rust_decl_kind(line: &str) -> Option<&'static str> {
-    let stripped = line.trim_start_matches("pub ").trim_start_matches("pub(crate) ").trim_start();
-    let stripped = stripped.trim_start_matches("async ").trim_start_matches("unsafe ");
+    let stripped = line
+        .trim_start_matches("pub ")
+        .trim_start_matches("pub(crate) ")
+        .trim_start();
+    let stripped = stripped
+        .trim_start_matches("async ")
+        .trim_start_matches("unsafe ");
     if stripped.starts_with("fn ") {
         return Some("fn");
     }
@@ -230,7 +238,10 @@ fn preceded_by_c_comment(lines: &[&str], idx: usize) -> bool {
         if t.starts_with('@') {
             continue;
         }
-        return t.starts_with("//") || t.ends_with("*/") || t.starts_with("/*") || t.starts_with("*");
+        return t.starts_with("//")
+            || t.ends_with("*/")
+            || t.starts_with("/*")
+            || t.starts_with("*");
     }
     false
 }

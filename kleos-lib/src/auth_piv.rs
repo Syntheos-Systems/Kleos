@@ -715,8 +715,7 @@ impl RequestSigner {
                         let mut fresh = yubikey::YubiKey::open().map_err(|e| {
                             EngError::Internal(format!("YubiKey reconnect failed: {e}"))
                         })?;
-                        let d = piv_verify_and_sign(&mut fresh, &digest)
-                        .map_err(|e| {
+                        let d = piv_verify_and_sign(&mut fresh, &digest).map_err(|e| {
                             EngError::Internal(format!(
                                 "YubiKey PIV signing failed after reconnect: {e}"
                             ))
@@ -838,8 +837,7 @@ impl RequestSigner {
                         let mut fresh = yubikey::YubiKey::open().map_err(|e| {
                             EngError::Internal(format!("YubiKey reconnect failed: {e}"))
                         })?;
-                        let d = piv_verify_and_sign(&mut fresh, &digest)
-                        .map_err(|e| {
+                        let d = piv_verify_and_sign(&mut fresh, &digest).map_err(|e| {
                             EngError::Internal(format!(
                                 "YubiKey PIV signing failed after reconnect: {e}"
                             ))

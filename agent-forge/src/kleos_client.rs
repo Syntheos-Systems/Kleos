@@ -47,8 +47,8 @@ pub struct KleosClient {
 impl KleosClient {
     /// Create a new client. Returns Err if KLEOS_URL is not set and default is unreachable.
     pub fn new() -> Result<Self, KleosClientError> {
-        let base_url = env::var("KLEOS_URL")
-            .unwrap_or_else(|_| "http://10.50.0.1:4200".to_string());
+        let base_url =
+            env::var("KLEOS_URL").unwrap_or_else(|_| "http://10.50.0.1:4200".to_string());
         let base_url = base_url.trim_end_matches('/').to_string();
         let api_key = env::var("KLEOS_API_KEY").ok();
 
@@ -57,11 +57,18 @@ impl KleosClient {
             .build()
             .map_err(|e| KleosClientError::RequestFailed(e.to_string()))?;
 
-        Ok(Self { http, base_url, api_key })
+        Ok(Self {
+            http,
+            base_url,
+            api_key,
+        })
     }
 
     /// Attach a `Bearer` token to the request if an API key is configured.
-    fn apply_auth(&self, req: reqwest::blocking::RequestBuilder) -> reqwest::blocking::RequestBuilder {
+    fn apply_auth(
+        &self,
+        req: reqwest::blocking::RequestBuilder,
+    ) -> reqwest::blocking::RequestBuilder {
         if let Some(key) = &self.api_key {
             req.bearer_auth(key)
         } else {
@@ -75,13 +82,18 @@ impl KleosClient {
         let url = format!("{}{}", self.base_url, path);
         let req = self.http.get(&url);
         let req = self.apply_auth(req);
-        let resp = req.send().map_err(|e| KleosClientError::RequestFailed(format!("{}: {}", url, e)))?;
+        let resp = req
+            .send()
+            .map_err(|e| KleosClientError::RequestFailed(format!("{}: {}", url, e)))?;
         if !resp.status().is_success() {
-            return Err(KleosClientError::RequestFailed(
-                format!("{}: HTTP {}", url, resp.status())
-            ));
+            return Err(KleosClientError::RequestFailed(format!(
+                "{}: HTTP {}",
+                url,
+                resp.status()
+            )));
         }
-        resp.json::<Value>().map_err(|e| KleosClientError::InvalidResponse(e.to_string()))
+        resp.json::<Value>()
+            .map_err(|e| KleosClientError::InvalidResponse(e.to_string()))
     }
 
     /// Execute a POST request with a JSON body against `path` (relative to
@@ -90,21 +102,29 @@ impl KleosClient {
         let url = format!("{}{}", self.base_url, path);
         let req = self.http.post(&url).json(&body);
         let req = self.apply_auth(req);
-        let resp = req.send().map_err(|e| KleosClientError::RequestFailed(format!("{}: {}", url, e)))?;
+        let resp = req
+            .send()
+            .map_err(|e| KleosClientError::RequestFailed(format!("{}: {}", url, e)))?;
         if !resp.status().is_success() {
             let status = resp.status();
             let body_text = resp.text().unwrap_or_default();
-            return Err(KleosClientError::RequestFailed(
-                format!("{}: HTTP {} -- {}", url, status, body_text)
-            ));
+            return Err(KleosClientError::RequestFailed(format!(
+                "{}: HTTP {} -- {}",
+                url, status, body_text
+            )));
         }
-        resp.json::<Value>().map_err(|e| KleosClientError::InvalidResponse(e.to_string()))
+        resp.json::<Value>()
+            .map_err(|e| KleosClientError::InvalidResponse(e.to_string()))
     }
 
     // --- Skill API methods ---
 
     /// Search for skills matching `query`, optionally capped at `limit` results.
-    pub fn search_skills(&self, query: &str, limit: Option<usize>) -> Result<Value, KleosClientError> {
+    pub fn search_skills(
+        &self,
+        query: &str,
+        limit: Option<usize>,
+    ) -> Result<Value, KleosClientError> {
         let mut body = json!({ "query": query });
         if let Some(l) = limit {
             body["limit"] = json!(l);
@@ -120,7 +140,11 @@ impl KleosClient {
 
     /// Submit a new skill to Kleos with the given natural-language description,
     /// optionally tagging it with the originating `agent` identifier.
-    pub fn capture_skill(&self, description: &str, agent: Option<&str>) -> Result<Value, KleosClientError> {
+    pub fn capture_skill(
+        &self,
+        description: &str,
+        agent: Option<&str>,
+    ) -> Result<Value, KleosClientError> {
         let mut body = json!({ "description": description });
         if let Some(a) = agent {
             body["agent"] = json!(a);
@@ -187,7 +211,12 @@ impl KleosClient {
 
     /// List skills with pagination support, optionally filtered to a single `agent`.
     #[allow(dead_code)]
-    pub fn list_skills(&self, limit: usize, offset: usize, agent: Option<&str>) -> Result<Value, KleosClientError> {
+    pub fn list_skills(
+        &self,
+        limit: usize,
+        offset: usize,
+        agent: Option<&str>,
+    ) -> Result<Value, KleosClientError> {
         let mut path = format!("/skills?limit={}&offset={}", limit, offset);
         if let Some(a) = agent {
             path.push_str(&format!("&agent={}", a));
