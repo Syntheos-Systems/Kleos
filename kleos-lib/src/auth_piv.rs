@@ -449,6 +449,22 @@ enum SigningBackend {
     Piv(Mutex<yubikey::YubiKey>),
 }
 
+#[cfg(feature = "piv")]
+fn piv_verify_and_sign(
+    yk: &mut yubikey::YubiKey,
+    digest: &[u8],
+) -> std::result::Result<Vec<u8>, yubikey::Error> {
+    let pin = std::env::var("PIV_PIN").unwrap_or_else(|_| "123456".to_string());
+    let _ = yk.verify_pin(pin.as_bytes());
+    yubikey::piv::sign_data(
+        yk,
+        digest,
+        yubikey::piv::AlgorithmId::EccP256,
+        yubikey::piv::SlotId::Authentication,
+    )
+    .map(|buf| buf.to_vec())
+}
+
 pub struct RequestSigner {
     backend: SigningBackend,
     algo: SignatureAlgo,
@@ -690,12 +706,7 @@ impl RequestSigner {
             SigningBackend::Piv(yk_mutex) => {
                 let digest = Sha256::digest(proof_msg.as_bytes());
                 let mut yk = yk_mutex.lock().unwrap();
-                let result = yubikey::piv::sign_data(
-                    &mut yk,
-                    &digest,
-                    yubikey::piv::AlgorithmId::EccP256,
-                    yubikey::piv::SlotId::Authentication,
-                );
+                let result = piv_verify_and_sign(&mut yk, &digest);
                 let sig_der = match result {
                     Ok(d) => d,
                     Err(_) => {
@@ -703,12 +714,7 @@ impl RequestSigner {
                         let mut fresh = yubikey::YubiKey::open().map_err(|e| {
                             EngError::Internal(format!("YubiKey reconnect failed: {e}"))
                         })?;
-                        let d = yubikey::piv::sign_data(
-                            &mut fresh,
-                            &digest,
-                            yubikey::piv::AlgorithmId::EccP256,
-                            yubikey::piv::SlotId::Authentication,
-                        )
+                        let d = piv_verify_and_sign(&mut fresh, &digest)
                         .map_err(|e| {
                             EngError::Internal(format!(
                                 "YubiKey PIV signing failed after reconnect: {e}"
@@ -822,12 +828,7 @@ impl RequestSigner {
             SigningBackend::Piv(yk_mutex) => {
                 let digest = Sha256::digest(&msg);
                 let mut yk = yk_mutex.lock().unwrap();
-                let result = yubikey::piv::sign_data(
-                    &mut yk,
-                    &digest,
-                    yubikey::piv::AlgorithmId::EccP256,
-                    yubikey::piv::SlotId::Authentication,
-                );
+                let result = piv_verify_and_sign(&mut yk, &digest);
                 // Drop stale handle and open fresh on any PCSC error
                 let sig_der = match result {
                     Ok(d) => d,
@@ -836,12 +837,7 @@ impl RequestSigner {
                         let mut fresh = yubikey::YubiKey::open().map_err(|e| {
                             EngError::Internal(format!("YubiKey reconnect failed: {e}"))
                         })?;
-                        let d = yubikey::piv::sign_data(
-                            &mut fresh,
-                            &digest,
-                            yubikey::piv::AlgorithmId::EccP256,
-                            yubikey::piv::SlotId::Authentication,
-                        )
+                        let d = piv_verify_and_sign(&mut fresh, &digest)
                         .map_err(|e| {
                             EngError::Internal(format!(
                                 "YubiKey PIV signing failed after reconnect: {e}"

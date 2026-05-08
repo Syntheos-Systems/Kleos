@@ -521,10 +521,15 @@ mod ecdh {
         agent_slot: &str,
     ) -> Result<(String, SystemTime), EcdhClientError> {
         // Load server's 9D public key.
-        let pem = std::fs::read_to_string(piv_pubkey_path())
-            .map_err(|_| EcdhClientError::NotConfigured)?;
-        let server_9d =
-            PublicKey::from_public_key_pem(&pem).map_err(|_| EcdhClientError::NotConfigured)?;
+        let path = piv_pubkey_path();
+        let pem = std::fs::read_to_string(&path).map_err(|e| {
+            tracing::warn!("ECDH: failed to read {}: {}", path.display(), e);
+            EcdhClientError::NotConfigured
+        })?;
+        let server_9d = PublicKey::from_public_key_pem(&pem).map_err(|e| {
+            tracing::warn!("ECDH: failed to parse 9D PEM ({}): {}", path.display(), e);
+            EcdhClientError::NotConfigured
+        })?;
 
         // Generate ephemeral keypair, compute the shared secret in software.
         let eph = EphemeralSecret::random(&mut OsRng);
@@ -611,31 +616,51 @@ mod ecdh {
     /// dependency cycle (kleos-cred already depends on kleos-lib).
     fn piv_sign_9a(payload: &[u8]) -> Result<Vec<u8>, EcdhClientError> {
         let payload_hex = hex::encode(payload);
+        let yk_serial = std::env::var("YKSERIAL").unwrap_or_default();
+        let piv_pin = std::env::var("PIV_PIN").unwrap_or_else(|_| "123456".to_string());
         // NOTE: yubikit's PivSession.sign(message, hash_algorithm=SHA256())
         // hashes the message INTERNALLY when hash_algorithm is set. Pre-hashing
         // and passing the digest causes a double-hash and verification failure
         // on the server. Pass the raw payload bytes.
         let script = format!(
             r#"
-import sys, base64
+import sys, os, base64
 from ykman.device import list_all_devices
 from yubikit.piv import PivSession, SLOT, KEY_TYPE
 from yubikit.core.smartcard import SmartCardConnection
 from cryptography.hazmat.primitives import hashes
 
 payload = bytes.fromhex("{payload}")
+target_serial = "{yk_serial}" if "{yk_serial}" else None
+piv_pin = "{piv_pin}"
 
 devices = list_all_devices()
 if not devices:
     print("no yubikey detected", file=sys.stderr); sys.exit(2)
 
-dev, _info = devices[0]
+dev, info = None, None
+if target_serial:
+    for d, i in devices:
+        if str(i.serial) == target_serial:
+            dev, info = d, i
+            break
+    if dev is None:
+        print(f"YubiKey with serial {{target_serial}} not found", file=sys.stderr); sys.exit(2)
+else:
+    if len(devices) > 1:
+        serials = ", ".join(str(i.serial) for _, i in devices)
+        print(f"multiple YubiKeys detected ({{serials}}), set YKSERIAL to pick one", file=sys.stderr); sys.exit(2)
+    dev, info = devices[0]
+
 with dev.open_connection(SmartCardConnection) as conn:
     session = PivSession(conn)
+    session.verify_pin(piv_pin)
     sig = session.sign(SLOT.AUTHENTICATION, KEY_TYPE.ECCP256, payload, hash_algorithm=hashes.SHA256())
     sys.stdout.write(base64.b16encode(sig).decode().lower())
 "#,
             payload = payload_hex,
+            yk_serial = yk_serial,
+            piv_pin = piv_pin,
         );
 
         let out = Command::new("python3")
