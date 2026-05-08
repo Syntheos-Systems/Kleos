@@ -97,12 +97,12 @@ pub(crate) async fn resolve_from_kleos(
     let kleos_url = std::env::var("KLEOS_URL")
         .or_else(|_| std::env::var("ENGRAM_URL"))
         .map_err(|_| {
-            tracing::error!(
+            tracing::debug!(
                 "KLEOS_URL not set; cannot resolve {}/{} from Kleos",
                 category,
                 name
             );
-            CredError::InvalidInput("KLEOS_URL not set".into())
+            CredError::NotFound(format!("{}/{} not found (no vault configured)", category, name))
         })?;
 
     let http = reqwest::Client::new();
@@ -133,8 +133,8 @@ pub(crate) async fn resolve_from_kleos(
     }
 
     let resp = req.send().await.map_err(|e| {
-        tracing::error!("Kleos /list failed for {}/{}: {}", category, name, e);
-        CredError::InvalidInput(format!("kleos unreachable: {}", e))
+        tracing::warn!("Kleos /list failed for {}/{}: {}", category, name, e);
+        CredError::NotFound(format!("{}/{} not found (vault unreachable)", category, name))
     })?;
 
     // Capture session token if issued
