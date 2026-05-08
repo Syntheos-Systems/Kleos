@@ -357,17 +357,19 @@ fn device_args() -> Vec<String> {
 #[cfg(windows)]
 fn try_ykman_calculate_win(challenge_hex: &str) -> Result<String> {
     let mut args = device_args();
-    args.extend(["otp".to_string(), "calculate".to_string(), SLOT.to_string(), challenge_hex.to_string()]);
+    args.extend([
+        "otp".to_string(),
+        "calculate".to_string(),
+        SLOT.to_string(),
+        challenge_hex.to_string(),
+    ]);
 
-    let out = Command::new("ykman")
-        .args(&args)
-        .output()
-        .map_err(|e| {
-            CredError::YubiKey(format!(
-                "ykman not found on PATH (install YubiKey Manager): {}",
-                e
-            ))
-        })?;
+    let out = Command::new("ykman").args(&args).output().map_err(|e| {
+        CredError::YubiKey(format!(
+            "ykman not found on PATH (install YubiKey Manager): {}",
+            e
+        ))
+    })?;
 
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
@@ -383,17 +385,19 @@ fn try_ykman_calculate_win(challenge_hex: &str) -> Result<String> {
 #[cfg(not(windows))]
 fn try_ykman_calculate(challenge_hex: &str) -> Result<String> {
     let mut args = device_args();
-    args.extend(["otp".to_string(), "calculate".to_string(), SLOT.to_string(), challenge_hex.to_string()]);
+    args.extend([
+        "otp".to_string(),
+        "calculate".to_string(),
+        SLOT.to_string(),
+        challenge_hex.to_string(),
+    ]);
 
-    let out = Command::new("ykman")
-        .args(&args)
-        .output()
-        .map_err(|e| {
-            CredError::YubiKey(format!(
-                "ykman not found on PATH (install yubikey-manager): {}",
-                e
-            ))
-        })?;
+    let out = Command::new("ykman").args(&args).output().map_err(|e| {
+        CredError::YubiKey(format!(
+            "ykman not found on PATH (install yubikey-manager): {}",
+            e
+        ))
+    })?;
 
     if !out.status.success() {
         let stderr = String::from_utf8_lossy(&out.stderr);
@@ -451,7 +455,13 @@ main()
 #[cfg(not(windows))]
 fn try_ykman_program(secret_hex: &str) -> Result<String> {
     let mut args = device_args();
-    args.extend(["otp".to_string(), "chalresp".to_string(), SLOT.to_string(), "--force".to_string(), secret_hex.to_string()]);
+    args.extend([
+        "otp".to_string(),
+        "chalresp".to_string(),
+        SLOT.to_string(),
+        "--force".to_string(),
+        secret_hex.to_string(),
+    ]);
 
     let out = Command::new("ykman")
         .args(&args)
@@ -514,7 +524,12 @@ main()
 #[cfg(not(windows))]
 fn try_ykman_delete() -> Result<String> {
     let mut args = device_args();
-    args.extend(["otp".to_string(), "delete".to_string(), SLOT.to_string(), "--force".to_string()]);
+    args.extend([
+        "otp".to_string(),
+        "delete".to_string(),
+        SLOT.to_string(),
+        "--force".to_string(),
+    ]);
 
     let out = Command::new("ykman")
         .args(&args)
@@ -550,7 +565,12 @@ main()
 
     let yk_serial = std::env::var("YKSERIAL").unwrap_or_default();
     let out = Command::new("sudo")
-        .args(["--preserve-env=YKMAN_DEVICE,YKMAN_ARG_1", "python3", "-c", SCRIPT])
+        .args([
+            "--preserve-env=YKMAN_DEVICE,YKMAN_ARG_1",
+            "python3",
+            "-c",
+            SCRIPT,
+        ])
         .env("YKMAN_DEVICE", &yk_serial)
         .env("YKMAN_ARG_1", SLOT.to_string())
         .output()

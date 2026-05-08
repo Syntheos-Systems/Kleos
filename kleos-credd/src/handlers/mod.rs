@@ -102,7 +102,10 @@ pub(crate) async fn resolve_from_kleos(
                 category,
                 name
             );
-            CredError::NotFound(format!("{}/{} not found (no vault configured)", category, name))
+            CredError::NotFound(format!(
+                "{}/{} not found (no vault configured)",
+                category, name
+            ))
         })?;
 
     let http = reqwest::Client::new();
@@ -134,7 +137,10 @@ pub(crate) async fn resolve_from_kleos(
 
     let resp = req.send().await.map_err(|e| {
         tracing::warn!("Kleos /list failed for {}/{}: {}", category, name, e);
-        CredError::NotFound(format!("{}/{} not found (vault unreachable)", category, name))
+        CredError::NotFound(format!(
+            "{}/{} not found (vault unreachable)",
+            category, name
+        ))
     })?;
 
     // Capture session token if issued

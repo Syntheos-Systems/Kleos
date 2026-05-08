@@ -125,9 +125,13 @@ fn main() {
         Commands::ChallengeCode => read_input(&cli.input)
             .map_err(|e| e.to_string())
             .and_then(|input| tools::verify::challenge_code(&db, input).map_err(|e| e.to_string())),
-        Commands::CommentCheck => read_input(&cli.input)
-            .map_err(|e| e.to_string())
-            .and_then(|input| tools::comments::comment_check(&db, input).map_err(|e| e.to_string())),
+        Commands::CommentCheck => {
+            read_input(&cli.input)
+                .map_err(|e| e.to_string())
+                .and_then(|input| {
+                    tools::comments::comment_check(&db, input).map_err(|e| e.to_string())
+                })
+        }
         Commands::SessionDiff => read_input(&cli.input)
             .map_err(|e| e.to_string())
             .and_then(|input| tools::verify::session_diff(&db, input).map_err(|e| e.to_string())),
