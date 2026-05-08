@@ -1,3 +1,7 @@
+//! AST-based symbol search. Walks a directory tree using `ignore` (so
+//! `.gitignore` rules apply), parses each supported file with tree-sitter,
+//! and returns symbols whose names contain the query string.
+
 use crate::db::Database;
 use crate::json_io::Output;
 use crate::tools::{ToolError, ToolResult};
@@ -6,6 +10,9 @@ use ignore::WalkBuilder;
 use serde::Deserialize;
 use std::path::Path;
 
+/// Input for `search_code`: the symbol name fragment to search for, a root
+/// path to walk, an optional kind filter ("function", "class", etc.), and
+/// a result cap.
 #[derive(Deserialize)]
 pub struct SearchCodeInput {
     pub query: Option<String>,
@@ -14,6 +21,8 @@ pub struct SearchCodeInput {
     pub limit: Option<usize>,
 }
 
+/// One symbol match: file path, 1-based line/column, the kind (function/class/
+/// enum/etc.), the symbol name, and the source line as context.
 #[derive(serde::Serialize)]
 struct SearchResult {
     file: String,
@@ -24,6 +33,9 @@ struct SearchResult {
     context: String,
 }
 
+/// Walk the directory at `input.path`, parse every supported file, and collect
+/// symbols whose names contain `query` (case-insensitive). Results are
+/// truncated at `limit` (default 20).
 pub fn search_code(_db: &Database, input: SearchCodeInput) -> ToolResult {
     let query = input
         .query
@@ -79,6 +91,9 @@ pub fn search_code(_db: &Database, input: SearchCodeInput) -> ToolResult {
     Ok(output)
 }
 
+/// Walk every node in `parsed`'s tree, collect named symbols whose kind passes
+/// `type_filter` and whose name contains `query`, and push matches into
+/// `results` until `limit` is reached.
 fn search_in_tree(
     parsed: &crate::treesitter::parser::ParsedFile,
     query: &str,

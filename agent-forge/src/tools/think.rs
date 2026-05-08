@@ -1,8 +1,14 @@
+//! Structured-reasoning tools: `think` emits a step-by-step reasoning prompt
+//! for a stated problem; `declare_unknowns` surfaces blocking vs non-blocking
+//! unknowns so the agent knows whether to halt and ask or proceed with caution.
+
 use crate::db::Database;
 use crate::json_io::Output;
 use crate::tools::{ToolError, ToolResult};
 use serde::Deserialize;
 
+/// Input for `think`: the problem to reason about, optional constraints, and
+/// any relevant context the agent already has.
 #[derive(Deserialize)]
 pub struct ThinkInput {
     pub problem: Option<String>,
@@ -10,6 +16,8 @@ pub struct ThinkInput {
     pub context: Option<String>,
 }
 
+/// Build and return a structured five-step reasoning prompt (know / find out /
+/// options / tradeoffs / recommendation) without persisting anything to the DB.
 pub fn think(_db: &Database, input: ThinkInput) -> ToolResult {
     let problem = input
         .problem
@@ -42,11 +50,14 @@ pub fn think(_db: &Database, input: ThinkInput) -> ToolResult {
     Ok(output)
 }
 
+/// Input for `declare_unknowns`: a list of at least one `UnknownItem`.
 #[derive(Deserialize)]
 pub struct DeclareUnknownsInput {
     pub unknowns: Option<Vec<UnknownItem>>,
 }
 
+/// One unknown: a description of what is not yet known, whether it blocks
+/// forward progress, and an optional hint for how to resolve it.
 #[derive(Deserialize)]
 pub struct UnknownItem {
     pub description: String,
@@ -54,6 +65,8 @@ pub struct UnknownItem {
     pub resolution_hint: Option<String>,
 }
 
+/// Partition unknowns into blocking and non-blocking sets and return a clear
+/// action directive: stop if any are blocking, proceed with caution otherwise.
 pub fn declare_unknowns(_db: &Database, input: DeclareUnknownsInput) -> ToolResult {
     let unknowns = input
         .unknowns

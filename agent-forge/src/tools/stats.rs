@@ -1,13 +1,22 @@
+//! Protocol usage statistics. Aggregates counts and rates for specs, hypotheses,
+//! verifications, learnings, approaches, and checkpoints over a configurable
+//! time window so the agent can self-assess adherence to the forge workflow.
+
 use crate::db::Database;
 use crate::json_io::Output;
 use crate::tools::{ToolError, ToolResult};
 use serde::Deserialize;
 
+/// Input for `stats`: the number of past days to include in the window
+/// (default 30). All counts are filtered to rows created within this window.
 #[derive(Deserialize)]
 pub struct StatsInput {
     pub days: Option<i64>,
 }
 
+/// Query all forge tables for counts and derived rates over the last `days`
+/// days, then return a structured summary including spec completion rate,
+/// hypothesis accuracy, verification pass rate, and top error patterns.
 pub fn stats(db: &Database, input: StatsInput) -> ToolResult {
     let days = input.days.unwrap_or(30);
     let cutoff = chrono::Utc::now().timestamp() - (days * 86400);

@@ -1,3 +1,8 @@
+//! agent-forge CLI entrypoint. Each subcommand reads a JSON input file, runs
+//! one tool from the `tools` module against the on-disk SQLite forge DB, and
+//! writes a JSON result back. Hooks in `~/.claude/` enforce that agents call
+//! these tools before/after editing code.
+
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -10,6 +15,7 @@ mod treesitter;
 use db::Database;
 use json_io::{read_input, write_output, Output};
 
+/// Top-level CLI: every invocation specifies a subcommand plus input/output JSON paths.
 #[derive(Parser)]
 #[command(name = "agent-forge")]
 #[command(about = "Structured reasoning and code quality workflow")]
@@ -30,6 +36,8 @@ struct Cli {
     db: String,
 }
 
+/// One enum variant per agent-forge tool. Names map 1:1 to the public tool
+/// reference in `~/.claude/reference/agent-forge-protocol.md`.
 #[derive(Subcommand, Debug)]
 enum Commands {
     SpecTask,
@@ -39,6 +47,7 @@ enum Commands {
     RecallErrors,
     Verify,
     ChallengeCode,
+    CommentCheck,
     Checkpoint,
     Rollback,
     SessionLearn,
@@ -60,6 +69,7 @@ enum Commands {
     SkillLineage,
 }
 
+/// Expand a leading `~/` in a path string to the user's home directory.
 fn expand_path(path: &str) -> PathBuf {
     if let Some(stripped) = path.strip_prefix("~/") {
         if let Some(home) = dirs::home_dir() {
@@ -69,6 +79,8 @@ fn expand_path(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
+/// Parse args, open the forge DB, dispatch to the requested tool, and write
+/// the JSON result to `--output`. Any error becomes an `Output::error` payload.
 fn main() {
     let cli = Cli::parse();
 
@@ -113,6 +125,9 @@ fn main() {
         Commands::ChallengeCode => read_input(&cli.input)
             .map_err(|e| e.to_string())
             .and_then(|input| tools::verify::challenge_code(&db, input).map_err(|e| e.to_string())),
+        Commands::CommentCheck => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::comments::comment_check(&db, input).map_err(|e| e.to_string())),
         Commands::SessionDiff => read_input(&cli.input)
             .map_err(|e| e.to_string())
             .and_then(|input| tools::verify::session_diff(&db, input).map_err(|e| e.to_string())),
