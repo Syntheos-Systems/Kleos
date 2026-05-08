@@ -4824,7 +4824,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "kleos-approval-tui"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "clap",
@@ -4849,7 +4849,7 @@ dependencies = [
 
 [[package]]
 name = "kleos-cli"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4869,7 +4869,7 @@ dependencies = [
 
 [[package]]
 name = "kleos-cred"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -4904,7 +4904,7 @@ dependencies = [
 
 [[package]]
 name = "kleos-credd"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -4965,7 +4965,7 @@ dependencies = [
 
 [[package]]
 name = "kleos-lib"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "aes-gcm",
  "arrow-array",
@@ -5024,7 +5024,7 @@ dependencies = [
 
 [[package]]
 name = "kleos-mcp"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "axum 0.8.9",
  "clap",
@@ -5042,7 +5042,7 @@ dependencies = [
 
 [[package]]
 name = "kleos-migrate"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -5061,7 +5061,7 @@ dependencies = [
 
 [[package]]
 name = "kleos-server"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "axum 0.8.9",
  "base64 0.22.1",
@@ -5073,6 +5073,7 @@ dependencies = [
  "hmac",
  "kleos-cred",
  "kleos-lib",
+ "kleos-mcp",
  "metrics",
  "metrics-exporter-prometheus",
  "mimalloc",
@@ -5109,7 +5110,7 @@ dependencies = [
 
 [[package]]
 name = "kleos-sidecar"
-version = "0.3.2"
+version = "0.4.0"
 dependencies = [
  "arc-swap",
  "axum 0.8.9",
