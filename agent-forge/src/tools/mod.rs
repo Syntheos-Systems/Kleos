@@ -1,5 +1,9 @@
+//! Agent-forge tool registry. Each submodule implements one CLI subcommand.
+//! Shared types (`ToolResult`, `ToolError`) and the session-active marker live here.
+
 pub mod approaches;
 pub mod ast;
+pub mod comments;
 pub mod hypothesis;
 pub mod session;
 pub mod skills;
@@ -10,8 +14,10 @@ pub mod verify;
 
 use crate::json_io::Output;
 
+/// Standard return type for every tool: structured `Output` on success, `ToolError` on failure.
 pub type ToolResult = Result<Output, ToolError>;
 
+/// Categorised failure modes for tool execution; rendered to the JSON output's `error` field.
 #[derive(Debug)]
 pub enum ToolError {
     MissingField(String),
@@ -20,7 +26,9 @@ pub enum ToolError {
     IoError(String),
 }
 
+/// Render `ToolError` as a short human string for the CLI's error output.
 impl std::fmt::Display for ToolError {
+    /// Human-readable form used when an error bubbles to the CLI output.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ToolError::MissingField(s) => write!(f, "Missing required field: {}", s),
@@ -31,6 +39,7 @@ impl std::fmt::Display for ToolError {
     }
 }
 
+/// Marker impl so `ToolError` plays nicely with `?` and any `dyn Error` chain.
 impl std::error::Error for ToolError {}
 
 /// Mark a forge artifact as the currently-active gate state for Claude Code's

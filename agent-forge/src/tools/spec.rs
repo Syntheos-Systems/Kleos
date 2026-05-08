@@ -1,3 +1,8 @@
+//! Spec lifecycle tools: `spec_task` creates a new task spec in the forge DB;
+//! `update_spec` transitions its status; `list_specs` paginates all specs;
+//! `get_spec` fetches a single spec together with its linked hypotheses,
+//! approaches, learnings, and verification records.
+
 use crate::db::Database;
 use crate::json_io::Output;
 use crate::kleos_client::KleosClient;
@@ -6,6 +11,8 @@ use chrono::Utc;
 use serde::Deserialize;
 use uuid::Uuid;
 
+/// Input for `spec_task`: all fields that define a new task specification.
+/// `acceptance_criteria` requires at least 2 items; `edge_cases` requires at least 3.
 #[derive(Deserialize)]
 pub struct SpecTaskInput {
     pub task_description: Option<String>,
@@ -17,6 +24,7 @@ pub struct SpecTaskInput {
     pub dependencies: Option<String>,
 }
 
+/// The set of recognised task types enforced at spec creation time.
 const VALID_TASK_TYPES: &[&str] = &[
     "feature",
     "bugfix",
@@ -26,6 +34,9 @@ const VALID_TASK_TYPES: &[&str] = &[
     "docs",
 ];
 
+/// Validate the input, persist a new spec row to the DB, set the session-active
+/// marker for the enforce hook, and return the new spec ID along with any
+/// skills from Kleos that are relevant to the task description.
 pub fn spec_task(db: &Database, input: SpecTaskInput) -> ToolResult {
     let task_description = input
         .task_description
@@ -101,6 +112,7 @@ pub fn spec_task(db: &Database, input: SpecTaskInput) -> ToolResult {
     Ok(output)
 }
 
+/// Input for `update_spec`: the spec to update, its new status, and an optional note.
 #[derive(Deserialize)]
 pub struct UpdateSpecInput {
     pub spec_id: Option<String>,
@@ -108,8 +120,11 @@ pub struct UpdateSpecInput {
     pub note: Option<String>,
 }
 
+/// The set of valid status values a spec can transition to.
 const VALID_STATUSES: &[&str] = &["active", "completed", "failed", "blocked"];
 
+/// Transition `spec_id` to a new status, recording an optional note and
+/// setting `completed_at` automatically when the status is terminal.
 pub fn update_spec(db: &Database, input: UpdateSpecInput) -> ToolResult {
     let spec_id = input
         .spec_id
@@ -150,12 +165,15 @@ pub fn update_spec(db: &Database, input: UpdateSpecInput) -> ToolResult {
     Ok(Output::ok(format!("Spec {} marked as {}", spec_id, status)))
 }
 
+/// Input for `list_specs`: optional status filter and result cap (default 20).
 #[derive(Deserialize)]
 pub struct ListSpecsInput {
     pub status: Option<String>,
     pub limit: Option<usize>,
 }
 
+/// Return specs ordered by creation time descending, optionally filtered to a
+/// single status value. Each row includes its description, type, status, and timestamps.
 pub fn list_specs(db: &Database, input: ListSpecsInput) -> ToolResult {
     let limit = input.limit.unwrap_or(20);
 
@@ -197,11 +215,15 @@ pub fn list_specs(db: &Database, input: ListSpecsInput) -> ToolResult {
     Ok(output)
 }
 
+/// Input for `get_spec`: the ID of the spec to retrieve.
 #[derive(Deserialize)]
 pub struct GetSpecInput {
     pub spec_id: Option<String>,
 }
 
+/// Fetch a full spec by ID, joining in all related hypotheses, approaches,
+/// session learnings, and verification records so the agent sees the complete
+/// history for that task in one call.
 pub fn get_spec(db: &Database, input: GetSpecInput) -> ToolResult {
     let spec_id = input
         .spec_id

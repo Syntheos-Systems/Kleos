@@ -1,12 +1,21 @@
+//! SQLite forge database -- opens the on-disk DB, applies the initial schema,
+//! and runs incremental migrations so older databases gain new columns without
+//! data loss. All tools share one `Database` instance per process.
+
 use rusqlite::{Connection, Result as SqliteResult};
 use std::fs;
 use std::path::Path;
 
+/// Thin wrapper around a `rusqlite::Connection` that owns the forge DB file.
+/// Callers borrow the inner connection via `conn()` to execute queries.
 pub struct Database {
     conn: Connection,
 }
 
+/// Open, initialise, and migrate the forge database.
 impl Database {
+    /// Open (or create) the forge DB at `path`, create parent directories as
+    /// needed, apply the full schema, and run any pending migrations.
     pub fn open(path: &Path) -> SqliteResult<Self> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).ok();
@@ -17,6 +26,8 @@ impl Database {
         Ok(db)
     }
 
+    /// Create all core tables (specs, hypotheses, checkpoints, session_learns,
+    /// approaches, verifications) if they do not already exist, then run migrations.
     fn init_schema(&self) -> SqliteResult<()> {
         self.conn.execute_batch(
             r#"
@@ -96,6 +107,8 @@ impl Database {
         self.migrate()
     }
 
+    /// Apply incremental column additions to existing databases. Each migration
+    /// is guarded by a probe query so it is safe to re-run on an up-to-date DB.
     fn migrate(&self) -> SqliteResult<()> {
         let has_column = |table: &str, col: &str| -> bool {
             self.conn
@@ -126,6 +139,8 @@ impl Database {
         Ok(())
     }
 
+    /// Return a shared reference to the underlying `rusqlite::Connection` for
+    /// direct query execution by callers.
     pub fn conn(&self) -> &Connection {
         &self.conn
     }

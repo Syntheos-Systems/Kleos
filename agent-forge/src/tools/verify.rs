@@ -1,3 +1,8 @@
+//! `verify`, `challenge_code`, and `session_diff` -- the post-edit gate tools.
+//! `verify` runs commands and records pass/fail per spec criterion; `challenge_code`
+//! emits an adversarial review prompt with a mechanical comment-coverage report;
+//! `session_diff` summarises git changes before declaring a task done.
+
 use crate::db::Database;
 use crate::json_io::Output;
 use crate::tools::{ToolError, ToolResult};
@@ -7,6 +12,8 @@ use std::process::Command;
 use std::time::Instant;
 use uuid::Uuid;
 
+/// Input for `verify`: a single command or a list of `steps`, plus optional
+/// linkage to a spec criterion or skill execution record.
 #[derive(Deserialize)]
 pub struct VerifyInput {
     pub command: Option<String>,
@@ -18,6 +25,7 @@ pub struct VerifyInput {
     pub steps: Option<Vec<VerifyStep>>,
 }
 
+/// One verification step: command line, the exit code that means success, and an optional label.
 #[derive(Deserialize, Clone)]
 pub struct VerifyStep {
     pub command: String,
@@ -25,6 +33,7 @@ pub struct VerifyStep {
     pub label: Option<String>,
 }
 
+/// Outcome of a single executed step: timing, captured stdout/stderr, and success flag.
 struct StepResult {
     command: String,
     label: Option<String>,
@@ -36,6 +45,7 @@ struct StepResult {
     stderr: String,
 }
 
+/// Execute one `VerifyStep` directly (no shell), honouring an optional timeout.
 fn run_step(step: &VerifyStep, timeout_secs: Option<u64>) -> Result<StepResult, ToolError> {
     // SECURITY (SEC-C1): parse command into argv and execute directly without
     // a shell. No shell injection from LLM-generated input.
@@ -112,6 +122,8 @@ fn run_step(step: &VerifyStep, timeout_secs: Option<u64>) -> Result<StepResult, 
     }
 }
 
+/// Run all verification steps, persist per-step records to the `verifications` table
+/// when a `spec_id` is supplied, and return a structured pass/fail summary.
 pub fn verify(db: &Database, input: VerifyInput) -> ToolResult {
     let skill_id = input.skill_id;
     let spec_id = input.spec_id;
@@ -226,12 +238,16 @@ pub fn verify(db: &Database, input: VerifyInput) -> ToolResult {
     Ok(output)
 }
 
+/// Input for `challenge_code`: target file plus optional override of the focus list.
 #[derive(Deserialize)]
 pub struct ChallengeCodeInput {
     pub file_path: Option<String>,
     pub focus_areas: Option<Vec<String>>,
 }
 
+/// Build an adversarial review prompt for `file_path`, defaulting focus to
+/// security/perf/error-handling/edge-cases/comment-coverage and embedding a
+/// mechanical comment-coverage report so the reviewer sees concrete gaps.
 pub fn challenge_code(_db: &Database, input: ChallengeCodeInput) -> ToolResult {
     let file_path = input
         .file_path
@@ -243,14 +259,24 @@ pub fn challenge_code(_db: &Database, input: ChallengeCodeInput) -> ToolResult {
             "performance".into(),
             "error_handling".into(),
             "edge_cases".into(),
+            "comment_coverage".into(),
         ]
     });
 
-    // Read the file
+    // Read the file for line count and comment scan
     let content = std::fs::read_to_string(&file_path)
         .map_err(|e| ToolError::IoError(format!("Cannot read {}: {}", file_path, e)))?;
 
     let lines = content.lines().count();
+
+    // Mechanically scan for undocumented declarations so the reviewer sees concrete gaps.
+    let comment_report = crate::tools::comments::comment_check(
+        _db,
+        crate::tools::comments::CommentCheckInput {
+            file_path: Some(file_path.clone()),
+        },
+    )
+    .ok();
 
     let mut output = Output::ok(format!(
         "Challenge: Review {} ({} lines) for: {}",
@@ -262,10 +288,18 @@ pub fn challenge_code(_db: &Database, input: ChallengeCodeInput) -> ToolResult {
         "file": file_path,
         "lines": lines,
         "focus_areas": focus,
+        "comment_report": comment_report.and_then(|o| o.data),
         "prompt": format!(
             "Adversarially review this code for issues in: {}. \
             Find real problems, not style nits. \
-            For each issue: describe it, explain impact, suggest fix.",
+            For each issue: describe it, explain impact, suggest fix. \
+            \
+            HARD RULE -- comment coverage: every declaration (fn, struct, enum, \
+            trait, impl, mod, type, class, method) MUST be preceded by a comment \
+            describing what the code does. Every non-trivial source file MUST \
+            have a module/file header comment stating its role. Treat any missing \
+            comment as a real problem, not a style nit. List each undocumented \
+            declaration by line number and propose the comment to add.",
             focus.join(", ")
         ),
     }));
@@ -273,6 +307,7 @@ pub fn challenge_code(_db: &Database, input: ChallengeCodeInput) -> ToolResult {
     Ok(output)
 }
 
+/// Input for `session_diff`: optional base ref to diff against (default `HEAD~10`).
 #[derive(Deserialize)]
 pub struct SessionDiffInput {
     pub base: Option<String>,
@@ -301,6 +336,8 @@ fn validate_git_ref(s: &str) -> std::result::Result<(), ToolError> {
     Ok(())
 }
 
+/// Summarise changes between `HEAD` and `base` (default `HEAD~10`): a `--stat`
+/// digest plus the list of changed files. Used as the final pre-done audit step.
 pub fn session_diff(_db: &Database, input: SessionDiffInput) -> ToolResult {
     let base = input.base.unwrap_or_else(|| "HEAD~10".into());
     // SECURITY: validate the ref to prevent flag injection into git args.

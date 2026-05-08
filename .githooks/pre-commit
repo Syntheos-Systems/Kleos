@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# Pre-commit ratchet: every staged source file must have a comment on every
+# declaration. Runs agent-forge comment-check on staged files and blocks the
+# commit if any are undocumented.
+#
+# Install: git config core.hooksPath .githooks
+# Bypass:  COMMENT_CHECK_SKIP=1 git commit ...   (use sparingly; record why)
+
+set -euo pipefail
+
+if [[ "${COMMENT_CHECK_SKIP:-0}" == "1" ]]; then
+    echo "[comment-check] SKIPPED via COMMENT_CHECK_SKIP=1" >&2
+    exit 0
+fi
+
+if ! command -v agent-forge >/dev/null 2>&1; then
+    echo "[comment-check] ERROR: agent-forge not found on PATH." >&2
+    echo "  Build and install: cd agent-forge && cargo build --release && cp target/release/agent-forge ~/.local/bin/" >&2
+    exit 1
+fi
+
+# Collect staged files in supported languages, excluding generated/build dirs.
+mapfile -t STAGED < <(
+    git diff --cached --name-only --diff-filter=ACMR -- \
+        '*.rs' '*.ts' '*.tsx' '*.js' '*.jsx' '*.go' '*.py' '*.java' '*.kt' '*.swift' '*.c' '*.cpp' '*.h' '*.hpp' \
+    | grep -Ev '^(target/|build-cache/|node_modules/|\.target-check|.*\.pb\.rs$|.*_generated\.rs$)' || true
+)
+
+if [[ ${#STAGED[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+TMP_IN="$(mktemp)"
+TMP_OUT="$(mktemp)"
+trap 'rm -f "$TMP_IN" "$TMP_OUT"' EXIT
+
+FAILED=0
+for rel in "${STAGED[@]}"; do
+    abs="$REPO_ROOT/$rel"
+    [[ -f "$abs" ]] || continue
+    printf '{"file_path":"%s"}' "$abs" > "$TMP_IN"
+    agent-forge --input "$TMP_IN" --output "$TMP_OUT" comment-check >/dev/null 2>&1 || true
+
+    missing="$(python3 -c "
+import json,sys
+try:
+    o = json.load(open('$TMP_OUT'))
+    d = o.get('data') or {}
+    print(d.get('missing', 0))
+except Exception:
+    print(0)
+")"
+
+    if [[ "$missing" -gt 0 ]]; then
+        FAILED=1
+        echo "[comment-check] $rel -- $missing undocumented declaration(s):" >&2
+        python3 -c "
+import json
+o = json.load(open('$TMP_OUT'))
+for f in (o.get('data') or {}).get('undocumented', [])[:25]:
+    print(f\"    line {f['line']:>5}  {f['item']:<8}  {f['declaration']}\")
+" >&2
+    fi
+done
+
+if [[ $FAILED -ne 0 ]]; then
+    echo "" >&2
+    echo "[comment-check] Commit blocked. Add a comment above each declaration describing what it does." >&2
+    echo "  Bypass (rare; record why in commit msg): COMMENT_CHECK_SKIP=1 git commit ..." >&2
+    exit 1
+fi
+
+exit 0
