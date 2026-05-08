@@ -1,12 +1,20 @@
+//! Skills tools -- thin wrappers that translate agent-forge CLI calls into
+//! Kleos skill API requests. Each public function corresponds to one CLI
+//! subcommand (SkillSearch, SkillCapture, SkillRecordExec, SkillFix,
+//! SkillDerive, SkillLineage).
+
 use crate::json_io::Output;
 use crate::kleos_client::KleosClient;
 use crate::tools::{ToolError, ToolResult};
 use serde::Deserialize;
 
+/// Build a `KleosClient`, mapping its error to `ToolError` for uniform handling.
 fn client() -> Result<KleosClient, ToolError> {
     KleosClient::new().map_err(|e| ToolError::IoError(e.to_string()))
 }
 
+/// Convert a `KleosClientError` into an `IoError`-typed `ToolError` for
+/// propagation through the standard `ToolResult` path.
 fn kleos_err(e: crate::kleos_client::KleosClientError) -> ToolError {
     ToolError::IoError(e.to_string())
 }
@@ -19,6 +27,7 @@ pub struct SkillSearchInput {
     pub limit: Option<usize>,
 }
 
+/// Search Kleos for skills matching `query`, returning up to `limit` results.
 pub fn skill_search(input: SkillSearchInput) -> ToolResult {
     let query = input.query.ok_or_else(|| ToolError::MissingField("query".into()))?;
     let client = client()?;
@@ -40,6 +49,8 @@ pub struct SkillCaptureInput {
     pub agent: Option<String>,
 }
 
+/// Submit a new skill description to Kleos and return the assigned skill ID.
+/// Rejects descriptions longer than 2000 characters before sending.
 pub fn skill_capture(input: SkillCaptureInput) -> ToolResult {
     let description = input.description.ok_or_else(|| ToolError::MissingField("description".into()))?;
     if description.len() > 2000 {
@@ -67,6 +78,8 @@ pub struct SkillRecordExecInput {
     pub error_message: Option<String>,
 }
 
+/// Record one execution attempt for a skill, including success/failure and
+/// optional timing and error details.
 pub fn skill_record_exec(input: SkillRecordExecInput) -> ToolResult {
     let skill_id = input.skill_id.ok_or_else(|| ToolError::MissingField("skill_id".into()))?;
     let success = input.success.ok_or_else(|| ToolError::MissingField("success".into()))?;
@@ -94,6 +107,8 @@ pub struct SkillFixInput {
     pub hint: Option<String>,
 }
 
+/// Ask Kleos to create a corrected version of the given skill, optionally
+/// guided by a free-text hint describing what to change.
 pub fn skill_fix(input: SkillFixInput) -> ToolResult {
     let skill_id = input.skill_id.ok_or_else(|| ToolError::MissingField("skill_id".into()))?;
     let client = client()?;
@@ -116,6 +131,8 @@ pub struct SkillDeriveInput {
     pub agent: Option<String>,
 }
 
+/// Derive a new skill from one or more parents using the given direction prompt.
+/// Requires at least one parent ID and a direction no longer than 2000 characters.
 pub fn skill_derive(input: SkillDeriveInput) -> ToolResult {
     let parent_ids = input.parent_ids.ok_or_else(|| ToolError::MissingField("parent_ids".into()))?;
     if parent_ids.is_empty() {
@@ -143,6 +160,7 @@ pub struct SkillLineageInput {
     pub skill_id: Option<i64>,
 }
 
+/// Fetch the full ancestor/descendant lineage graph for the given skill ID.
 pub fn skill_lineage(input: SkillLineageInput) -> ToolResult {
     let skill_id = input.skill_id.ok_or_else(|| ToolError::MissingField("skill_id".into()))?;
     let client = client()?;

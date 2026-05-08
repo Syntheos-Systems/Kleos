@@ -1,3 +1,7 @@
+//! `consider_approaches` tool -- records two or more named design alternatives
+//! in the forge DB and emits a structured comparison prompt that guides the
+//! agent toward an explicit, justified choice.
+
 use crate::db::Database;
 use crate::json_io::Output;
 use crate::tools::{ToolError, ToolResult};
@@ -5,6 +9,9 @@ use chrono::Utc;
 use serde::Deserialize;
 use uuid::Uuid;
 
+/// Input payload for `consider_approaches`: a problem statement, a list of
+/// candidate approaches, an optional spec linkage, and an optional index
+/// indicating which approach was ultimately chosen.
 #[derive(Deserialize)]
 pub struct ConsiderApproachesInput {
     pub spec_id: Option<String>,
@@ -13,6 +20,8 @@ pub struct ConsiderApproachesInput {
     pub chosen_index: Option<usize>,
 }
 
+/// One design alternative: a short name, prose description, pros, cons, and
+/// an optional numeric score (higher is better).
 #[derive(Deserialize)]
 pub struct ApproachItem {
     pub name: String,
@@ -24,6 +33,8 @@ pub struct ApproachItem {
     pub score: Option<f64>,
 }
 
+/// Validate inputs, persist all approaches to the DB (marking the chosen one),
+/// and return a structured comparison prompt suitable for agent reasoning.
 pub fn consider_approaches(db: &Database, input: ConsiderApproachesInput) -> ToolResult {
     let problem = input
         .problem
@@ -125,16 +136,19 @@ pub fn consider_approaches(db: &Database, input: ConsiderApproachesInput) -> Too
 }
 
 #[cfg(test)]
+/// Unit tests for `consider_approaches` input validation and happy-path storage.
 mod tests {
     use super::*;
     use tempfile::tempdir;
 
+    /// Spin up a temporary forge DB for a single test.
     fn db() -> (tempfile::TempDir, Database) {
         let dir = tempdir().unwrap();
         let db = Database::open(&dir.path().join("forge.db")).unwrap();
         (dir, db)
     }
 
+    /// Verify that omitting `problem` returns a `MissingField` error.
     #[test]
     fn requires_problem() {
         let (_d, db) = db();
@@ -152,6 +166,7 @@ mod tests {
         ));
     }
 
+    /// Verify that supplying fewer than two approaches returns an `InvalidValue` error.
     #[test]
     fn requires_two_approaches() {
         let (_d, db) = db();
@@ -173,6 +188,7 @@ mod tests {
         assert!(matches!(r, Err(ToolError::InvalidValue(_))));
     }
 
+    /// Verify that a `chosen_index` beyond the approaches slice returns `InvalidValue`.
     #[test]
     fn rejects_invalid_chosen_index() {
         let (_d, db) = db();
@@ -203,6 +219,7 @@ mod tests {
         assert!(matches!(r, Err(ToolError::InvalidValue(_))));
     }
 
+    /// Verify that referencing a non-existent spec_id returns `InvalidValue`.
     #[test]
     fn rejects_invalid_spec_id() {
         let (_d, db) = db();
@@ -233,6 +250,7 @@ mod tests {
         assert!(matches!(r, Err(ToolError::InvalidValue(_))));
     }
 
+    /// Verify that a valid call stores both approaches and marks exactly one as chosen.
     #[test]
     fn happy_path_with_chosen() {
         let (_d, db) = db();

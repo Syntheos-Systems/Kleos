@@ -1,3 +1,8 @@
+//! Hypothesis lifecycle tools: `log_hypothesis` records an agent's proposed
+//! explanation for a bug before it touches any code; `log_outcome` updates
+//! that record once the fix is confirmed or disproved; `recall_errors` searches
+//! past hypothesis records by keyword so the agent can learn from prior mistakes.
+
 use crate::db::Database;
 use crate::json_io::Output;
 use crate::tools::{set_session_active, ToolError, ToolResult};
@@ -5,6 +10,8 @@ use chrono::Utc;
 use serde::Deserialize;
 use uuid::Uuid;
 
+/// Input for `log_hypothesis`: bug context, the proposed root-cause explanation,
+/// a confidence score in [0.0, 1.0], and optional linkage to a spec.
 #[derive(Deserialize)]
 pub struct LogHypothesisInput {
     pub bug_description: Option<String>,
@@ -13,6 +20,8 @@ pub struct LogHypothesisInput {
     pub spec_id: Option<String>,
 }
 
+/// Validate the confidence range, persist the hypothesis to the DB, and set
+/// the session-active marker so the enforce hook knows a hypothesis is open.
 pub fn log_hypothesis(db: &Database, input: LogHypothesisInput) -> ToolResult {
     let bug_description = input
         .bug_description
@@ -47,6 +56,8 @@ pub fn log_hypothesis(db: &Database, input: LogHypothesisInput) -> ToolResult {
     Ok(Output::ok_with_id(id, "Hypothesis logged"))
 }
 
+/// Input for `log_outcome`: which hypothesis to close, the result
+/// ("correct", "incorrect", or "partial"), and optional explanatory notes.
 #[derive(Deserialize)]
 pub struct LogOutcomeInput {
     pub hypothesis_id: Option<String>,
@@ -54,6 +65,8 @@ pub struct LogOutcomeInput {
     pub notes: Option<String>,
 }
 
+/// Update the `outcome`, `outcome_notes`, and `verified_at` columns for an
+/// existing hypothesis row. Returns an error if the hypothesis ID is not found.
 pub fn log_outcome(db: &Database, input: LogOutcomeInput) -> ToolResult {
     let hypothesis_id = input
         .hypothesis_id
@@ -92,12 +105,15 @@ pub fn log_outcome(db: &Database, input: LogOutcomeInput) -> ToolResult {
     Ok(Output::ok("Outcome recorded"))
 }
 
+/// Input for `recall_errors`: a keyword to search past hypotheses and a result cap.
 #[derive(Deserialize)]
 pub struct RecallErrorsInput {
     pub query: Option<String>,
     pub limit: Option<usize>,
 }
 
+/// Full-text LIKE search over `bug_description` and `hypothesis` columns, returning
+/// the most-recent matches so the agent can avoid repeating known mistakes.
 pub fn recall_errors(db: &Database, input: RecallErrorsInput) -> ToolResult {
     let query = input.query.unwrap_or_default();
     let limit = input.limit.unwrap_or(10);

@@ -1,3 +1,7 @@
+//! AST-based repository map generator. Walks a directory tree, extracts every
+//! named symbol from supported files, optionally boosts symbols from focus
+//! paths, and returns a ranked symbol list within a configurable token budget.
+
 use crate::db::Database;
 use crate::json_io::Output;
 use crate::tools::{ToolError, ToolResult};
@@ -6,6 +10,8 @@ use ignore::WalkBuilder;
 use serde::Deserialize;
 use std::path::Path;
 
+/// Input for `repo_map`: the directory root to scan, path fragments to
+/// prioritise, and a token budget that caps the output size.
 #[derive(Deserialize)]
 pub struct RepoMapInput {
     pub path: Option<String>,
@@ -13,15 +19,20 @@ pub struct RepoMapInput {
     pub max_tokens: Option<usize>,
 }
 
+/// Internal representation of one extracted symbol before ranking and formatting.
 #[derive(Default)]
 struct Symbol {
     name: String,
     kind: String,
     file: String,
     line: usize,
+    /// Pseudo-importance score -- boosted for symbols in focus paths.
     references: usize,
 }
 
+/// Scan the repository at `input.path`, extract all named symbols, boost those
+/// in focus paths, sort by importance, and format the top symbols into a
+/// newline-delimited map that fits within `max_tokens` (default 4000).
 pub fn repo_map(_db: &Database, input: RepoMapInput) -> ToolResult {
     let path = input
         .path
@@ -108,6 +119,8 @@ pub fn repo_map(_db: &Database, input: RepoMapInput) -> ToolResult {
     Ok(result)
 }
 
+/// Walk every node in `parsed`'s syntax tree and push a `Symbol` entry for
+/// each named declaration (fn, struct, impl, trait, enum, const) found.
 fn extract_symbols(parsed: &crate::treesitter::parser::ParsedFile, symbols: &mut Vec<Symbol>) {
     let mut cursor = parsed.tree.walk();
 

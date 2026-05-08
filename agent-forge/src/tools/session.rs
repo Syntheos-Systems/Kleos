@@ -1,3 +1,8 @@
+//! Session lifecycle tools: `checkpoint` snapshots the current git HEAD for
+//! later rollback; `rollback` restores a named checkpoint; `session_learn`
+//! records a mid-session discovery (optionally forwarding it to Kleos as a
+//! skill); `session_recall` retrieves past learnings by keyword search.
+
 use crate::db::Database;
 use crate::json_io::Output;
 use crate::tools::{ToolError, ToolResult};
@@ -6,12 +11,15 @@ use serde::Deserialize;
 use std::process::Command;
 use uuid::Uuid;
 
+/// Input for `checkpoint`: a required human-readable name and an optional description.
 #[derive(Deserialize)]
 pub struct CheckpointInput {
     pub name: Option<String>,
     pub description: Option<String>,
 }
 
+/// Record the current `git rev-parse HEAD` value under `name` so the agent
+/// can return to this point if subsequent edits go wrong.
 pub fn checkpoint(db: &Database, input: CheckpointInput) -> ToolResult {
     let name = input
         .name
@@ -44,11 +52,14 @@ pub fn checkpoint(db: &Database, input: CheckpointInput) -> ToolResult {
     ))
 }
 
+/// Input for `rollback`: the name of a previously created checkpoint to restore.
 #[derive(Deserialize)]
 pub struct RollbackInput {
     pub checkpoint_name: Option<String>,
 }
 
+/// Look up the git hash stored under `checkpoint_name` and run `git checkout`
+/// to restore the working tree to that commit.
 pub fn rollback(db: &Database, input: RollbackInput) -> ToolResult {
     let name = input
         .checkpoint_name
@@ -77,6 +88,8 @@ pub fn rollback(db: &Database, input: RollbackInput) -> ToolResult {
     Ok(Output::ok(format!("Rolled back to checkpoint '{}'", name)))
 }
 
+/// Input for `session_learn`: the insight to record plus optional context,
+/// tags, spec linkage, and a flag to simultaneously capture it as a Kleos skill.
 #[derive(Deserialize)]
 pub struct SessionLearnInput {
     pub discovery: Option<String>,
@@ -86,6 +99,9 @@ pub struct SessionLearnInput {
     pub spec_id: Option<String>,
 }
 
+/// Persist a mid-session discovery to the `session_learns` table. If
+/// `capture_as_skill` is true, also forward the discovery text to the Kleos
+/// skill capture endpoint (best-effort -- failures are logged but do not abort).
 pub fn session_learn(db: &Database, input: SessionLearnInput) -> ToolResult {
     let capture_as_skill = input.capture_as_skill;
     let spec_id = input.spec_id;
@@ -139,12 +155,15 @@ pub fn session_learn(db: &Database, input: SessionLearnInput) -> ToolResult {
     Ok(output)
 }
 
+/// Input for `session_recall`: a keyword to search past learnings and a result cap.
 #[derive(Deserialize)]
 pub struct SessionRecallInput {
     pub query: Option<String>,
     pub limit: Option<usize>,
 }
 
+/// Search `session_learns` for rows whose `discovery` text contains `query`,
+/// returning the most-recent matches up to `limit` (default 10).
 pub fn session_recall(db: &Database, input: SessionRecallInput) -> ToolResult {
     let query = input.query.unwrap_or_default();
     let limit = input.limit.unwrap_or(10);
