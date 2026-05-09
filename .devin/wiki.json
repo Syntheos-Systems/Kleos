@@ -1,0 +1,195 @@
+{
+  "repo_notes": [
+    {
+      "content": "Kleos is a persistent semantic memory and cognitive infrastructure system for AI agents, built as a Rust workspace monorepo. A 4-channel hybrid search engine (vector similarity, full-text BM25, knowledge graph traversal, personality signals) merges results via Reciprocal Rank Fusion and cross-encoder reranking. Kleos gives AI agents long-term memory, structured reasoning, and human-in-the-loop approval gates. LLMs connect to Kleos as their memory and coordination layer.",
+      "author": "maintainer"
+    },
+    {
+      "content": "The workspace has 15 crates. kleos-lib sits at the base of the dependency graph (51+ modules, ~85K lines). kleos-server depends on kleos-lib and exposes it as an Axum REST API with 47 route modules and 8 middleware layers. kleos-cli is an HTTP client for the server. kleos-mcp exposes 57 tools via Model Context Protocol for direct LLM integration. kleos-sidecar batches and ships session memory with retry. kleos-cred and kleos-credd form a credential vault (library + daemon). agent-forge is a structured reasoning protocol CLI. kleos-sh gates shell commands for AI agents. kleos-fs offers AST-aware file operations (read/write/edit). eidolon-supervisor watches sessions for drift violations. kleos-ingest ingests transcripts and files. kleos-migrate runs ETL from encrypted monolith to per-tenant shards. kleos-cleanup deduplicates and demotes stale data. kleos-approval-tui is a Ratatui approval queue interface.",
+      "author": "maintainer"
+    },
+    {
+      "content": "kleos-lib has 7 internal coordination services named after neuroscience terms: Axon (event bus with channels and subscriptions), Broca (structured action log), Chiasm (task tracker with retries/timeouts), Soma (agent registry with heartbeats), Loom (DAG workflow engine supporting action/decision/parallel/wait/webhook/LLM/transform nodes), Thymus (quality evaluation with memory feedback loops), and Brain (async subprocess orchestration for cognitive backends). Each service has full CRUD, persistence, and integration with the activity fan-out system.",
+      "author": "maintainer"
+    },
+    {
+      "content": "Authentication uses bearer tokens (SHA-256 hashed + peppered) and request signing (ECDSA-P256 or Ed25519 with a custom KLEOSv1 signing envelope). YubiKey PIV adds optional hardware-backed authentication via HMAC-SHA1 challenge-response. The credential vault (kleos-cred/kleos-credd) encrypts with AES-256-GCM, derives keys with Argon2id, enforces two-tier auth (master key + scoped agent keys), and bootstraps agents via ECDH for zero-knowledge provisioning.",
+      "author": "maintainer"
+    },
+    {
+      "content": "Four cognitive subsystems operate on stored memories. FSRS-6 spaced repetition uses 21 trained weights and DualStrength tuples to schedule memory reinforcement. The knowledge graph auto-links entities by cosine similarity, assigns typed edges, runs Louvain community detection (10K nodes/pass), and scores with PageRank. An optional continuous Hopfield network (feature-gated as brain_hopfield) uses softmax attention with capacity exponential in dimension. A 6-stage dream cycle (replay/merge/prune/discover/decorrelate/resolve) consolidates memories without operator intervention.",
+      "author": "maintainer"
+    },
+    {
+      "content": "Every tenant gets a dedicated SQLite database file with optional SQLCipher at-rest encryption. Separate deadpool connection pools split readers and writers per tenant. The server enforces quotas on bytes and memory count per tenant and requires user_id on all queries. kleos-migrate moves data from an encrypted monolith into per-tenant shards. 44 numbered forward-compatible migrations track schema evolution.",
+      "author": "maintainer"
+    },
+    {
+      "content": "The server spawns background tasks: auto-backup, auto-checkpoint, job cleanup, session reaper, vector sync replay, and periodic PageRank refresh. A 3-state circuit breaker (Closed/Open/Half-Open) wraps each external call. Retries use exponential backoff with jitter and classify errors before reattempting. A SQLite-backed dead-letter queue captures failed work for inspection and replay. Safe-mode blocks writes when the server detects a crash loop.",
+      "author": "maintainer"
+    },
+    {
+      "content": "Client SDKs ship for TypeScript (Node.js 18+), Python (3.10+, Pydantic v2 + httpx), and Go (1.22+, stdlib only). Each SDK covers memory CRUD, search, context assembly, agent management, graph queries, skills, and batch operations. A SvelteKit web GUI embedded in the server binary shows entity browsing, knowledge graph visualization, inbox, project management, search, and activity timeline views.",
+      "author": "maintainer"
+    },
+    {
+      "content": "Vector search uses BAAI/bge-m3 ONNX embeddings (1024-dimensional) stored in LanceDB with approximate nearest neighbor indexing. The ONNX runtime is loaded dynamically (not statically linked). Full-text search uses SQLite FTS5 with BM25 scoring. The reranker uses an IBM Granite cross-encoder model. Embedder, FTS, and reranker all run locally with zero external API calls.",
+      "author": "maintainer"
+    },
+    {
+      "content": "agent-forge enforces a structured development protocol for AI agents: spec_task before writing code, log_hypothesis before debugging, verify + challenge_code + session_diff before completing work. 20+ commands cover spec management, hypothesis tracking, verification, learning, AST-aware code analysis (tree-sitter parsers for Rust, TypeScript, Python, Go, C/C++, JavaScript, JSON), and skill lifecycle management. No code ships without a spec; no bug fix ships without a logged hypothesis.",
+      "author": "maintainer"
+    }
+  ],
+  "pages": [
+    {
+      "title": "Architecture Overview",
+      "purpose": "High-level system architecture: workspace crate map, dependency graph between crates, data flow from client through server to storage layers, and the key architectural decisions (local-first, multi-tenant SQLite, hybrid search, neuroscience-named services)."
+    },
+    {
+      "title": "Getting Started",
+      "purpose": "Build instructions, runtime dependencies (ONNX runtime, protoc), configuration file format and environment variables, first-run setup including tenant creation, and a minimal workflow showing store -> search -> context retrieval.",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Core Library (kleos-lib)",
+      "purpose": "Overview of the foundational library: its 51+ module structure, public API surface, feature flags (brain_hopfield, tenant-sharding, sqlcipher, piv), and how other crates depend on it. Include the module dependency graph within kleos-lib itself.",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Memory System",
+      "purpose": "Document the memory module: Memory struct and its fields, CRUD operations, memory types/importance/emotional valence, the store-embed-index pipeline, memory scoring and decay, and the relationship between SQLite storage and LanceDB vector storage.",
+      "parent": "Core Library (kleos-lib)"
+    },
+    {
+      "title": "Search and Retrieval",
+      "purpose": "The 4-channel hybrid search engine: vector similarity (BAAI/bge-m3 ONNX, 1024-dim, LanceDB ANN), full-text search (FTS5 BM25), graph-augmented retrieval, personality signal boosting. How Reciprocal Rank Fusion merges results. The IBM Granite cross-encoder reranker. Query parsing, faceted search, and filter expressions.",
+      "parent": "Core Library (kleos-lib)"
+    },
+    {
+      "title": "Embeddings and Vector Storage",
+      "purpose": "ONNX embedding provider implementation: model loading, tokenization, batching, normalization. LanceDB vector store: table management, ANN index building, sync/replay mechanism. The vector module's relationship to the memory module. Dynamic ONNX runtime loading.",
+      "parent": "Core Library (kleos-lib)"
+    },
+    {
+      "title": "Knowledge Graph",
+      "purpose": "Graph module: entity and relationship types, auto-linking by cosine similarity threshold, typed edges with metadata, Louvain community detection algorithm (10K nodes per pass), PageRank computation and refresh scheduling, structural analysis, and graph-augmented search (2-hop traversal).",
+      "parent": "Core Library (kleos-lib)"
+    },
+    {
+      "title": "Cognitive Features",
+      "purpose": "FSRS-6 spaced repetition system (21 trained weights, DualStrength tuples, review scheduling). The optional Hopfield network backend (continuous modern variant, softmax attention, exponential capacity). The 6-stage dream cycle (replay, merge, prune, discover, decorrelate, resolve). Personality signal extraction and memory reinforcement.",
+      "parent": "Core Library (kleos-lib)"
+    },
+    {
+      "title": "Coordination Services",
+      "purpose": "The 7 neuroscience-named coordination services: Axon (event bus -- channels, subscriptions, retention windows, fan-out), Broca (action log -- structured entries, query/filter), Chiasm (task tracker -- states, retries, timeouts, assignments), Soma (agent registry -- heartbeats, capability declarations), Loom (DAG workflow engine -- node types, execution model, state transitions), Thymus (QA evaluation -- feedback loops, scoring), Brain (cognitive orchestrator -- subprocess management, async coordination).",
+      "parent": "Core Library (kleos-lib)"
+    },
+    {
+      "title": "Context Assembly",
+      "purpose": "Context assembly: how the server selects, ranks, and packs memories into context windows for LLMs. Token budget management, relevance scoring, temporal weighting, and how context assembly depends on the search system.",
+      "parent": "Core Library (kleos-lib)"
+    },
+    {
+      "title": "Authentication and Security",
+      "purpose": "Auth module: bearer token authentication (SHA-256 hashing with pepper), request signing protocol (KLEOSv1 envelope, ECDSA-P256 and Ed25519 support), API key management, agent key scoping and permissions. The gate module (pre-action allow/warn/block decisions with human approval queue). The guard module (content evaluation). The encryption module (SQLCipher integration). PIV/YubiKey authentication flow.",
+      "parent": "Core Library (kleos-lib)"
+    },
+    {
+      "title": "Multi-Tenancy and Data Isolation",
+      "purpose": "Tenant module: per-tenant SQLite database isolation, deadpool connection pool management (separate reader/writer pools), tenant provisioning and lifecycle, quota enforcement (bytes and memory count), user_id enforcement on all queries, and the relationship to SQLCipher at-rest encryption.",
+      "parent": "Core Library (kleos-lib)"
+    },
+    {
+      "title": "Resilience Patterns",
+      "purpose": "The resilience module: 3-state circuit breaker (Closed/Open/Half-Open) with configurable thresholds, retry with exponential backoff and jitter plus smart error classification, SQLite-backed dead-letter queue for failed work inspection/replay, safe-mode (automatic write-blocking on crash-loop detection). How these patterns compose across the server.",
+      "parent": "Core Library (kleos-lib)"
+    },
+    {
+      "title": "Ingestion Pipeline",
+      "purpose": "Document ingestion from kleos-lib's ingestion module: supported formats (JSON, JSONL, Markdown, CSV, PDF, ZIP), parsing pipeline, chunking strategies, metadata extraction. Also cover the kleos-ingest daemon: file watcher, transcript tailer, summarization engine, ledger tracking, PIV request signing.",
+      "parent": "Core Library (kleos-lib)"
+    },
+    {
+      "title": "Server Architecture",
+      "purpose": "kleos-server overview: Axum application structure, how routes are organized (47 route modules in categorized subdirectories), the middleware stack composition order, application state management, startup sequence, graceful shutdown, and how the embedded SvelteKit GUI is served.",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "API Routes Reference",
+      "purpose": "API route documentation organized by category: Core (memory, context, search, graph, intelligence, skills), Admin (agents, auth_keys, policy, users, platform), Services (axon, broca, chiasm, soma, loom, thymus), Integration (webhooks, handoffs, portability, onboard), Monitoring (health, growth, sessions, batch), Advanced (gate, grounding, commerce, personality). Include HTTP methods, path patterns, and request/response types.",
+      "parent": "Server Architecture"
+    },
+    {
+      "title": "Middleware Stack",
+      "purpose": "The 8 middleware layers in execution order: auth (bearer + signing verification), rate_limit (per-tenant quota enforcement), audit (mutation logging), client_ip (request origin tracking), json_depth (payload depth limiting), metrics (Prometheus export), safe_mode (crash-loop protection), and tower-http (compression, timeouts, CORS). How they compose and interact.",
+      "parent": "Server Architecture"
+    },
+    {
+      "title": "Background Services",
+      "purpose": "Server background tasks: auto-backup scheduling and execution, auto-checkpoint, job cleanup, session reaper (stale session detection and cleanup), vector sync replay (recovering from interrupted vector operations), PageRank refresh scheduling, and the Dreamer stats aggregation service.",
+      "parent": "Server Architecture"
+    },
+    {
+      "title": "CLI Reference",
+      "purpose": "kleos-cli: all commands (store, search, context, recall, guard, list, delete, bootstrap, ingest, hook with import-plugins), their flags and options, output formats, PIV authentication usage, and configuration (server URL, auth token). Include practical usage examples for each command.",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "MCP Server",
+      "purpose": "kleos-mcp: the 57 MCP tools exposed for LLM integration, transport modes (stdio default, HTTP feature-gated), tool categories and their purposes, how it maps MCP tool calls to kleos-lib operations, and configuration for use with Claude, GPT, and other MCP-compatible clients.",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Session Sidecar",
+      "purpose": "kleos-sidecar: session memory proxy architecture, file watcher for session logs, batched flushing (configurable size and interval), retry with compression, persistent session store, metrics export, LLM compression backend (Ollama integration), and the Syntheos module.",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Credential System",
+      "purpose": "The two-crate credential vault: kleos-cred (library -- AES-256-GCM encryption, Argon2id KDF, agent key management with permission scoping, YubiKey PIV, recovery keys, credential types: Login, ApiKey, OAuthApp, SshKey, Note, Environment) and kleos-credd (HTTP daemon -- two-tier auth, ECDH bootstrap for zero-knowledge agent provisioning, YubiKey/password/keyfile auth modes).",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Agent Forge",
+      "purpose": "Structured reasoning protocol CLI: the 20+ commands organized by category -- Spec (spec-task, update-spec, list-specs, get-spec), Hypothesis (log-hypothesis, log-outcome, recall-errors), Verification (verify, challenge-code, comment-check), Learning (session-learn, session-recall, session-diff), Code Analysis (repo-map, search-code with tree-sitter AST for Rust/TS/Python/Go/C/C++/JS/JSON), Skill Management (skill-search, skill-capture, skill-record-exec, skill-fix, skill-derive, skill-lineage), Utility (checkpoint, rollback, stats, think, declare-unknowns).",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Shell and Filesystem Tools",
+      "purpose": "kleos-sh: universal shell command gate replacing bash guardrail scripts, gate modes (normal execution, gate-only check, Claude Code PreToolUse hook mode), JSON I/O for Claude Code integration. kleos-fs: three AST-aware binaries (kr for read, kw for write, ke for edit) providing guarded file operations for AI agents.",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Eidolon Supervisor",
+      "purpose": "Session drift detection daemon: async file-system watcher on session logs, rule-based violation detection engine, cooldown management to prevent alert fatigue, real-time alerting to Kleos server, and how it enforces behavioral constraints on AI agent sessions.",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Client SDKs",
+      "purpose": "The three client SDKs: TypeScript (Node.js 18+, full API coverage), Python (3.10+, Pydantic v2 models, httpx async client), Go (1.22+, stdlib-only with zero dependencies). Common API surface across all three: memory CRUD, search with facets, context assembly, agent management, graph queries, skills, API key management, and batch operations. Include code examples from each SDK.",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Web GUI",
+      "purpose": "Embedded SvelteKit web interface: route structure (home, entities, graph, inbox, projects, search, timeline), the central engram.ts store for state management, how the GUI is compiled into the server binary, and each view's functionality (entity browser, knowledge graph visualization, notification inbox, project management, memory search, activity timeline).",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Database Schema and Migrations",
+      "purpose": "SQLite schema design: core tables, indexes, FTS5 virtual tables, the 44 numbered migrations and their evolution of the schema, SQLCipher encryption integration, LanceDB vector table structure (Arrow columnar format), and the relationship between SQLite and LanceDB storage layers.",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Deployment and Operations",
+      "purpose": "Build profiles (release with fat LTO, release-prod with thin LTO for faster builds, release-local for profiling, bench profile), Dockerfile structure, deployment as a single statically linked binary (mimalloc allocator), configuration management, the operations manual reference, monitoring via Prometheus metrics, and platform support (Linux x86_64/ARM64, macOS, Windows).",
+      "parent": "Architecture Overview"
+    },
+    {
+      "title": "Activity System and Observability",
+      "purpose": "The activity fan-out system: a single POST to /activity dispatches to Chiasm (tasks), Axon (events), Broca (action log), Thymus (metrics), Skills (matching), and Memory (storage). Observability stack: structured tracing via tracing-subscriber, OpenTelemetry export (OTLP), Prometheus metrics via metrics-exporter-prometheus, and the audit log for mutation tracking.",
+      "parent": "Architecture Overview"
+    }
+  ]
+}
