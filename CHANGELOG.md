@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-05-10
+
+### Added
+
+- Skills Cloud v50: aliases, bundles, materializations, hybrid find with weighted tag/text/semantic search
+- Plugin importer for YAML-based skill files (`kleos-cli import-plugins`)
+- User management with enrollment invites and active status tracking
+- MCP schema endpoint (auth-gated) and dispatch routes with scope-gated tool categories
+- Identity key rotation and metadata support
+- Agent tool runtime crate (`forge`) -- skill-driven dispatch for Kleos-authenticated tools
+
+### Changed
+
+- All 16 workspace crates bumped to 1.0.0
+- Artifact ownership model cleanup
+- reqwest workspace dep gains `multipart` feature
+
+### Fixed
+
+- Duplicate `/users` route registration that caused a panic on startup
+
+### Security
+
+- MCP schema endpoint moved behind auth middleware
+- Scope-gated dispatch (Admin/Write/Read per tool category)
+- Fixed greedy YAML prefix matching in plugin importer
+- SkillKind validation on create and update
+
 ## [0.4.0] - 2026-05-08
 
 ### Added

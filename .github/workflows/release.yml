@@ -161,17 +161,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Transition release: also push ghostframe/engram for one release so
-      # existing deployments pinned to ghostframe/engram continue to work.
-      # Remove this step after the transition period.
-      - name: Tag and push legacy ghostframe/engram image
-        run: |
-          VERSION="${{ steps.tag.outputs.TAG }}"
-          docker pull ghostframe/kleos:${VERSION}
-          docker tag ghostframe/kleos:${VERSION} ghostframe/engram:${VERSION}
-          docker tag ghostframe/kleos:${VERSION} ghostframe/engram:latest
-          docker push ghostframe/engram:${VERSION}
-          docker push ghostframe/engram:latest
 
   # ─── Publish to crates.io ─────────────────────────────────────────────────
   publish-crates:

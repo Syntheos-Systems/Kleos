@@ -1,6 +1,6 @@
 [package]
 name = "kleos-ingest"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 publish = false
 license = "MIT"
@@ -22,4 +22,4 @@ clap = { workspace = true }
 dirs = { workspace = true }
 sha2 = { workspace = true }
 chrono = { workspace = true }
-kleos-lib = { path = "../kleos-lib", version = "0.4.0", features = ["piv"] }
+kleos-lib = { path = "../kleos-lib", version = "1.0.0", features = ["piv"] }
