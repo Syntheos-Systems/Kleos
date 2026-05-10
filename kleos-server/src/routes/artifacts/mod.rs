@@ -19,6 +19,7 @@ use kleos_lib::validation::MAX_ARTIFACT_UPLOAD_BYTES as MAX_UPLOAD_BYTES;
 #[allow(dead_code)]
 mod types;
 
+/// Build the artifact route tree.
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/artifacts/stats", get(get_stats))
@@ -29,8 +30,9 @@ pub fn router() -> Router<AppState> {
         .route("/artifact/{id}", get(download_artifact))
 }
 
-async fn get_stats(ResolvedDb(db): ResolvedDb, Auth(auth): Auth) -> Result<Json<Value>, AppError> {
-    let stats = artifacts::get_artifact_stats(&db, auth.user_id).await?;
+/// Return aggregate artifact storage statistics (count and byte totals by storage tier).
+async fn get_stats(ResolvedDb(db): ResolvedDb, Auth(_auth): Auth) -> Result<Json<Value>, AppError> {
+    let stats = artifacts::get_artifact_stats(&db).await?;
     Ok(Json(json!({
         "total_count": stats.total_count,
         "total_bytes": stats.total_bytes,
@@ -39,29 +41,26 @@ async fn get_stats(ResolvedDb(db): ResolvedDb, Auth(auth): Auth) -> Result<Json<
     })))
 }
 
+/// List all artifacts attached to the given memory ID after verifying it exists.
 async fn list_for_memory(
     ResolvedDb(db): ResolvedDb,
-    Auth(auth): Auth,
+    Auth(_auth): Auth,
     Path(memory_id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
-    // Verify the memory belongs to this user
-    let owner: i64 = db
-        .read(move |conn| {
-            conn.query_row(
-                "SELECT 1 FROM memories WHERE id = ?1",
-                rusqlite::params![memory_id],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(|e| kleos_lib::EngError::DatabaseMessage(e.to_string()))
-        })
-        .await?
-        .ok_or_else(|| AppError(kleos_lib::EngError::NotFound("Not found".into())))?;
-    if owner != auth.user_id {
-        return Err(AppError(kleos_lib::EngError::NotFound("Not found".into())));
-    }
+    // Verify the memory exists in this tenant DB
+    db.read(move |conn| {
+        conn.query_row(
+            "SELECT 1 FROM memories WHERE id = ?1",
+            rusqlite::params![memory_id],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(|e| kleos_lib::EngError::DatabaseMessage(e.to_string()))
+    })
+    .await?
+    .ok_or_else(|| AppError(kleos_lib::EngError::NotFound("Memory not found".into())))?;
 
-    let artifacts = artifacts::get_artifacts_by_memory(&db, memory_id, auth.user_id).await?;
+    let artifacts = artifacts::get_artifacts_by_memory(&db, memory_id).await?;
     Ok(Json(
         json!({ "artifacts": artifacts, "memory_id": memory_id }),
     ))
@@ -79,7 +78,7 @@ async fn list_for_memory(
 ///   - `metadata` (optional): JSON string
 async fn upload_artifact(
     ResolvedDb(db): ResolvedDb,
-    Auth(auth): Auth,
+    Auth(_auth): Auth,
     Path(memory_id): Path<i64>,
     mut multipart: Multipart,
 ) -> Result<Json<Value>, AppError> {
@@ -200,7 +199,6 @@ async fn upload_artifact(
 
     let artifact_id = artifacts::store_artifact(
         &db,
-        auth.user_id,
         memory_id,
         &display_name,
         &filename,
@@ -216,7 +214,7 @@ async fn upload_artifact(
     .await?;
 
     // Index for FTS if applicable
-    artifacts::index_artifact(&db, artifact_id, auth.user_id, &mime_type, &data).await;
+    artifacts::index_artifact(&db, artifact_id, &mime_type, &data).await;
 
     Ok(Json(json!({
         "id": artifact_id,
@@ -228,41 +226,37 @@ async fn upload_artifact(
     })))
 }
 
+/// Stream an artifact's binary data as an attachment, verifying its owning memory exists.
 async fn download_artifact(
     ResolvedDb(db): ResolvedDb,
-    Auth(auth): Auth,
+    Auth(_auth): Auth,
     Path(id): Path<i64>,
 ) -> Result<Response, AppError> {
-    let artifact = artifacts::get_artifact_by_id(&db, id, auth.user_id)
+    let artifact = artifacts::get_artifact_by_id(&db, id)
         .await?
         .ok_or_else(|| AppError(kleos_lib::EngError::NotFound("Artifact not found".into())))?;
 
-    // Verify the owning memory belongs to this user
-    // Reject orphaned artifacts (no memory_id) to prevent BOLA
+    // Reject orphaned artifacts (no memory_id)
     let memory_id = artifact.memory_id.ok_or_else(|| {
         AppError(kleos_lib::EngError::NotFound(
             "Artifact has no associated memory".into(),
         ))
     })?;
 
-    let owner: i64 = db
-        .read(move |conn| {
-            conn.query_row(
-                "SELECT 1 FROM memories WHERE id = ?1",
-                rusqlite::params![memory_id],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(|e| kleos_lib::EngError::DatabaseMessage(e.to_string()))
-        })
-        .await?
-        .ok_or_else(|| AppError(kleos_lib::EngError::NotFound("Not found".into())))?;
-    if owner != auth.user_id {
-        return Err(AppError(kleos_lib::EngError::NotFound("Not found".into())));
-    }
+    // Verify the owning memory exists in this tenant DB
+    db.read(move |conn| {
+        conn.query_row(
+            "SELECT 1 FROM memories WHERE id = ?1",
+            rusqlite::params![memory_id],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(|e| kleos_lib::EngError::DatabaseMessage(e.to_string()))
+    })
+    .await?
+    .ok_or_else(|| AppError(kleos_lib::EngError::NotFound("Memory not found".into())))?;
 
-    // Get artifact data (inline storage only for now)
-    let data = artifacts::get_artifact_data(&db, id, auth.user_id)
+    let data = artifacts::get_artifact_data(&db, id)
         .await?
         .ok_or_else(|| AppError(kleos_lib::EngError::Internal("Artifact has no data".into())))?;
 

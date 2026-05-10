@@ -8,12 +8,15 @@ use serde::{Deserialize, Serialize};
 use crate::db::Database;
 use crate::{EngError, Result};
 
+/// Maximum byte size of artifact content that will be submitted to the FTS index.
 const ARTIFACT_FTS_MAX_SIZE: usize = 1_048_576;
 
+/// Converts a rusqlite error into an EngError for uniform error propagation.
 fn rusqlite_to_eng_error(err: rusqlite::Error) -> EngError {
     EngError::DatabaseMessage(err.to_string())
 }
 
+/// Row representation of a stored artifact.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactRow {
     pub id: i64,
@@ -28,6 +31,7 @@ pub struct ArtifactRow {
     pub created_at: String,
 }
 
+/// Aggregate statistics for artifact storage.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactStats {
     pub total_count: i64,
@@ -38,6 +42,7 @@ pub struct ArtifactStats {
     pub disk_bytes: i64,
 }
 
+/// Lightweight artifact metadata used in enrichment results.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactSummary {
     pub id: i64,
@@ -46,6 +51,7 @@ pub struct ArtifactSummary {
     pub size_bytes: i64,
 }
 
+/// Compute SHA-256 hash of byte data, returned as a hex string.
 pub fn sha256_hex(data: &[u8]) -> String {
     use sha2::Digest;
     let mut hasher = sha2::Sha256::new();
@@ -53,6 +59,7 @@ pub fn sha256_hex(data: &[u8]) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Application MIME type subtypes that are eligible for FTS indexing.
 const INDEXABLE_APP_TYPES: &[&str] = &[
     "application/json",
     "application/yaml",
@@ -65,6 +72,7 @@ const INDEXABLE_APP_TYPES: &[&str] = &[
     "application/x-python",
 ];
 
+/// Check if a MIME type should be full-text indexed.
 pub fn is_indexable_mime_type(mime: &str) -> bool {
     if mime.starts_with("text/") {
         return true;
@@ -72,11 +80,11 @@ pub fn is_indexable_mime_type(mime: &str) -> bool {
     INDEXABLE_APP_TYPES.contains(&mime)
 }
 
-#[tracing::instrument(skip(db, data), fields(artifact_id, user_id, mime_type = %mime_type, data_len = data.len()))]
+/// Add an artifact's text content to the FTS index.
+#[tracing::instrument(skip(db, data), fields(artifact_id, mime_type = %mime_type, data_len = data.len()))]
 pub async fn index_artifact(
     db: &Database,
     artifact_id: i64,
-    user_id: i64,
     mime_type: &str,
     data: &[u8],
 ) -> bool {
@@ -88,14 +96,12 @@ pub async fn index_artifact(
         _ => return false,
     };
 
-    let owned = db
+    let exists = db
         .read(move |conn| {
             let found = conn
                 .query_row(
-                    "SELECT 1 FROM artifacts a \
-                     INNER JOIN memories m ON a.memory_id = m.id \
-                     WHERE a.id = ?1 AND m.user_id = ?2",
-                    params![artifact_id, user_id],
+                    "SELECT 1 FROM artifacts WHERE id = ?1",
+                    params![artifact_id],
                     |_| Ok(()),
                 )
                 .optional()
@@ -105,12 +111,8 @@ pub async fn index_artifact(
         .await
         .unwrap_or(false);
 
-    if !owned {
-        tracing::warn!(
-            artifact_id,
-            user_id,
-            "artifact FTS index rejected: not owned"
-        );
+    if !exists {
+        tracing::warn!(artifact_id, "artifact FTS index rejected: not found");
         return false;
     }
 
@@ -151,15 +153,13 @@ pub struct StoreArtifactOpts {
 
 /// Insert an artifact row attached to `memory_id`.
 ///
-/// SECURITY (MT-F3): callers must pass the authenticated `user_id` so we
-/// can verify the target memory belongs to that tenant *before* inserting.
-/// Without this gate, a tenant holding any numeric memory id could attach
-/// files to another tenant's memory row.
+/// Tenant isolation is handled at the database level (each tenant has its
+/// own DB file). The memory existence check ensures the target memory is
+/// valid within this tenant's database.
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(skip(db, data, disk_path, opts), fields(user_id, memory_id, mime_type = %mime_type, size_bytes, sha256 = %sha256, storage_mode = %storage_mode, is_encrypted))]
+#[tracing::instrument(skip(db, data, disk_path, opts), fields(memory_id, mime_type = %mime_type, size_bytes, sha256 = %sha256, storage_mode = %storage_mode, is_encrypted))]
 pub async fn store_artifact(
     db: &Database,
-    user_id: i64,
     memory_id: i64,
     name: &str,
     filename: &str,
@@ -189,7 +189,7 @@ pub async fn store_artifact(
     let metadata = opts.metadata.clone();
 
     db.write(move |conn| {
-        let owned = conn
+        let exists = conn
             .query_row(
                 "SELECT 1 FROM memories WHERE id = ?1",
                 params![memory_id],
@@ -198,9 +198,9 @@ pub async fn store_artifact(
             .optional()
             .map_err(rusqlite_to_eng_error)?;
 
-        if owned.is_none() {
+        if exists.is_none() {
             return Err(crate::EngError::NotFound(
-                "memory not found for this tenant".into(),
+                "memory not found".into(),
             ));
         }
 
@@ -208,8 +208,8 @@ pub async fn store_artifact(
             "INSERT INTO artifacts \
              (name, memory_id, filename, artifact_type, content, mime_type, \
               size_bytes, sha256, storage_mode, data, disk_path, is_encrypted, \
-              source_url, agent, session_id, metadata, user_id) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17) \
+              source_url, agent, session_id, metadata) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) \
              RETURNING id",
             params![
                 name,
@@ -227,8 +227,7 @@ pub async fn store_artifact(
                 source_url,
                 agent,
                 session_id,
-                metadata,
-                user_id
+                metadata
             ],
             |row| row.get::<_, i64>(0),
         )
@@ -237,25 +236,24 @@ pub async fn store_artifact(
     .await
 }
 
-#[tracing::instrument(skip(db), fields(memory_id, user_id))]
+/// List all artifacts attached to a memory.
+#[tracing::instrument(skip(db), fields(memory_id))]
 pub async fn get_artifacts_by_memory(
     db: &Database,
     memory_id: i64,
-    user_id: i64,
 ) -> Result<Vec<ArtifactRow>> {
     db.read(move |conn| {
         let mut stmt = conn
             .prepare(
-                "SELECT a.id, a.memory_id, a.filename, a.mime_type, a.size_bytes, \
-                        a.sha256, a.storage_mode, a.is_encrypted, a.is_indexed, a.created_at \
-                 FROM artifacts a \
-                 INNER JOIN memories m ON a.memory_id = m.id \
-                 WHERE a.memory_id = ?1 AND m.user_id = ?2",
+                "SELECT id, memory_id, filename, mime_type, size_bytes, \
+                        sha256, storage_mode, is_encrypted, is_indexed, created_at \
+                 FROM artifacts \
+                 WHERE memory_id = ?1",
             )
             .map_err(rusqlite_to_eng_error)?;
 
         let rows = stmt
-            .query_map(params![memory_id, user_id], row_to_artifact)
+            .query_map(params![memory_id], row_to_artifact)
             .map_err(rusqlite_to_eng_error)?;
 
         rows.collect::<std::result::Result<Vec<_>, _>>()
@@ -264,20 +262,19 @@ pub async fn get_artifacts_by_memory(
     .await
 }
 
-#[tracing::instrument(skip(db), fields(artifact_id, user_id))]
+/// Retrieve a single artifact's metadata by ID.
+#[tracing::instrument(skip(db), fields(artifact_id))]
 pub async fn get_artifact_by_id(
     db: &Database,
     artifact_id: i64,
-    user_id: i64,
 ) -> Result<Option<ArtifactRow>> {
     db.read(move |conn| {
         conn.query_row(
-            "SELECT a.id, a.memory_id, a.filename, a.mime_type, a.size_bytes, \
-                    a.sha256, a.storage_mode, a.is_encrypted, a.is_indexed, a.created_at \
-             FROM artifacts a \
-             INNER JOIN memories m ON a.memory_id = m.id \
-             WHERE a.id = ?1 AND m.user_id = ?2",
-            params![artifact_id, user_id],
+            "SELECT id, memory_id, filename, mime_type, size_bytes, \
+                    sha256, storage_mode, is_encrypted, is_indexed, created_at \
+             FROM artifacts \
+             WHERE id = ?1",
+            params![artifact_id],
             row_to_artifact,
         )
         .optional()
@@ -286,37 +283,12 @@ pub async fn get_artifact_by_id(
     .await
 }
 
-/// Per-tenant artifact statistics (SECURITY: MT-F4).
+/// Per-tenant artifact statistics.
 ///
-/// The previous helper accepted `Option<i64>` where `None` meant "every
-/// tenant's artifacts collapsed into one number." That was an admin
-/// backdoor reachable from an otherwise tenant-scoped handler. Split into
-/// two explicit entry points so the scope is obvious at the call site.
-#[tracing::instrument(skip(db), fields(user_id))]
-pub async fn get_artifact_stats(db: &Database, user_id: i64) -> Result<ArtifactStats> {
-    db.read(move |conn| {
-        conn.query_row(
-            "SELECT COUNT(*), \
-                    COALESCE(SUM(a.size_bytes),0), \
-                    COALESCE(SUM(CASE WHEN a.storage_mode='inline' THEN a.size_bytes ELSE 0 END),0), \
-                    COALESCE(SUM(CASE WHEN a.storage_mode='disk' THEN a.size_bytes ELSE 0 END),0), \
-                    COALESCE(SUM(CASE WHEN a.storage_mode='inline' THEN 1 ELSE 0 END),0), \
-                    COALESCE(SUM(CASE WHEN a.storage_mode='disk' THEN 1 ELSE 0 END),0) \
-             FROM artifacts a \
-             JOIN memories m ON a.memory_id = m.id \
-             WHERE m.user_id = ?1",
-            params![user_id],
-            stats_from_row,
-        )
-        .map_err(rusqlite_to_eng_error)
-    })
-    .await
-}
-
-/// Cluster-wide artifact statistics. Only call from explicitly admin-gated
-/// routes. Never expose to tenant-scoped handlers.
+/// Tenant isolation is at the database level -- each tenant DB contains
+/// only that tenant's data, so no user_id filter is needed.
 #[tracing::instrument(skip(db))]
-pub async fn get_artifact_stats_all(db: &Database) -> Result<ArtifactStats> {
+pub async fn get_artifact_stats(db: &Database) -> Result<ArtifactStats> {
     db.read(move |conn| {
         conn.query_row(
             "SELECT COUNT(*), \
@@ -334,15 +306,15 @@ pub async fn get_artifact_stats_all(db: &Database) -> Result<ArtifactStats> {
     .await
 }
 
-#[tracing::instrument(skip(db, memory_ids), fields(memory_count = memory_ids.len(), user_id))]
+/// Batch-load artifact summaries for a set of memory IDs.
+#[tracing::instrument(skip(db, memory_ids), fields(memory_count = memory_ids.len()))]
 pub async fn enrich_with_artifacts(
     db: &Database,
     memory_ids: &[i64],
-    user_id: i64,
 ) -> Result<std::collections::HashMap<i64, Vec<ArtifactSummary>>> {
     let mut map = std::collections::HashMap::new();
     for &mid in memory_ids {
-        let arts = get_artifacts_by_memory(db, mid, user_id).await?;
+        let arts = get_artifacts_by_memory(db, mid).await?;
         let summaries: Vec<ArtifactSummary> = arts
             .into_iter()
             .map(|a| ArtifactSummary {
@@ -359,18 +331,16 @@ pub async fn enrich_with_artifacts(
     Ok(map)
 }
 
-#[tracing::instrument(skip(db), fields(artifact_id, user_id))]
+/// Retrieve the raw binary data for an artifact.
+#[tracing::instrument(skip(db), fields(artifact_id))]
 pub async fn get_artifact_data(
     db: &Database,
     artifact_id: i64,
-    user_id: i64,
 ) -> Result<Option<Vec<u8>>> {
     db.read(move |conn| {
         conn.query_row(
-            "SELECT a.data FROM artifacts a \
-             INNER JOIN memories m ON a.memory_id = m.id \
-             WHERE a.id = ?1 AND m.user_id = ?2",
-            params![artifact_id, user_id],
+            "SELECT data FROM artifacts WHERE id = ?1",
+            params![artifact_id],
             |row| row.get::<_, Option<Vec<u8>>>(0),
         )
         .optional()
@@ -380,6 +350,7 @@ pub async fn get_artifact_data(
     .await
 }
 
+/// Maps a rusqlite row to an ArtifactStats value.
 fn stats_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ArtifactStats> {
     Ok(ArtifactStats {
         total_count: row.get::<_, i64>(0).unwrap_or(0),
@@ -391,6 +362,7 @@ fn stats_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ArtifactStats> {
     })
 }
 
+/// Maps a rusqlite row to an ArtifactRow value.
 fn row_to_artifact(row: &rusqlite::Row<'_>) -> rusqlite::Result<ArtifactRow> {
     Ok(ArtifactRow {
         id: row.get(0)?,
@@ -406,10 +378,12 @@ fn row_to_artifact(row: &rusqlite::Row<'_>) -> rusqlite::Result<ArtifactRow> {
     })
 }
 
+/// Unit tests for artifact operations.
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Verifies MIME type classification for FTS indexability.
     #[test]
     fn test_indexable_mime_types() {
         assert!(is_indexable_mime_type("text/plain"));
@@ -417,6 +391,7 @@ mod tests {
         assert!(!is_indexable_mime_type("image/png"));
     }
 
+    /// Verifies SHA-256 hex output is 64 characters long.
     #[test]
     fn test_sha256_hex() {
         let hash = sha256_hex(b"hello");

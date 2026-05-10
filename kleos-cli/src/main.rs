@@ -1,4 +1,5 @@
 mod hook;
+mod import_plugins;
 use hook::{run_hook, HookCommands};
 
 use clap::{Parser, Subcommand};
@@ -9,6 +10,7 @@ use std::time::Duration;
 #[derive(Parser)]
 #[command(name = "kleos-cli")]
 #[command(about = "Kleos memory system CLI", long_about = None)]
+/// Top-level CLI entry point; selects the server URL and dispatches subcommands.
 struct Cli {
     /// Server URL
     #[arg(long, default_value = "http://127.0.0.1:4200", env = "KLEOS_URL")]
@@ -26,6 +28,7 @@ struct Cli {
     command: Commands,
 }
 
+/// All top-level subcommands available through `kleos-cli`.
 #[derive(Subcommand)]
 enum Commands {
     /// Store a new memory
@@ -140,8 +143,18 @@ enum Commands {
     /// Identity key management (PIV YubiKey + software Ed25519)
     #[command(subcommand)]
     Identity(IdentityCommands),
+    /// User account management (admin-only, multi-user instances)
+    #[command(subcommand)]
+    User(UserCommands),
+    /// Enrollment invite management (generate one-time tokens for FIDO2 key registration)
+    #[command(subcommand)]
+    Invite(InviteCommands),
+    /// Artifact storage management
+    #[command(subcommand)]
+    Artifact(ArtifactCommands),
 }
 
+/// Subcommands for `kleos-cli identity` -- PIV YubiKey and software Ed25519 key management.
 #[derive(Subcommand)]
 enum IdentityCommands {
     /// Initialize signing identity: detect PIV YubiKey or generate Ed25519 key, then enroll with server
@@ -167,6 +180,80 @@ enum IdentityCommands {
     },
 }
 
+/// Subcommands for `kleos-cli user` -- CRUD on user accounts.
+#[derive(Subcommand)]
+enum UserCommands {
+    /// Create a new user account on the server
+    Create {
+        /// Username (must be unique)
+        #[arg(short, long)]
+        username: String,
+        /// Optional email address
+        #[arg(short, long)]
+        email: Option<String>,
+        /// Role label (defaults to "user")
+        #[arg(short, long)]
+        role: Option<String>,
+    },
+    /// List all user accounts
+    List {
+        /// Include deactivated users in the output
+        #[arg(long)]
+        include_inactive: bool,
+    },
+}
+
+/// Subcommands for `kleos-cli invite` -- one-time enrollment tokens.
+#[derive(Subcommand)]
+enum InviteCommands {
+    /// Generate a one-time enrollment invite for a user
+    Create {
+        /// Target user ID who will consume this invite
+        #[arg(long)]
+        user_id: i64,
+        /// Auth method (defaults to "fido2")
+        #[arg(long, default_value = "fido2")]
+        method: String,
+    },
+}
+
+/// Subcommands for `kleos-cli artifact` -- upload, list, download, and inspect artifacts.
+#[derive(Subcommand)]
+enum ArtifactCommands {
+    /// Upload a file as an artifact attached to a memory
+    Upload {
+        /// Memory ID to attach the artifact to
+        memory_id: i64,
+        /// Path to the file to upload
+        file: String,
+        /// Display name (defaults to filename)
+        #[arg(short, long)]
+        name: Option<String>,
+        /// Artifact type (defaults to "file")
+        #[arg(short = 't', long)]
+        artifact_type: Option<String>,
+        /// Agent name
+        #[arg(long, default_value = "claude-code")]
+        agent: String,
+    },
+    /// List artifacts attached to a memory
+    List {
+        /// Memory ID
+        memory_id: i64,
+    },
+    /// Download an artifact by ID
+    Get {
+        /// Artifact ID
+        id: i64,
+        /// Output file path (defaults to original filename, or stdout with -)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Show artifact storage statistics
+    Stats,
+}
+
+/// Subcommands for `kleos-cli jobs` -- durable job queue inspection and control.
 #[derive(Subcommand)]
 enum JobsCommands {
     /// Show queue stats (pending / running / completed / failed counts)
@@ -205,6 +292,7 @@ enum JobsCommands {
     },
 }
 
+/// Subcommands for `kleos-cli cred` -- secret CRUD and agent key management via credd.
 #[derive(Subcommand)]
 enum CredCommands {
     /// Get a secret value
@@ -296,6 +384,7 @@ enum CredCommands {
     },
 }
 
+/// Subcommands for `kleos-cli skill` -- Skills Cloud CRUD, search, import, and materialization.
 #[derive(Subcommand)]
 enum SkillCommands {
     /// Search skills by query
@@ -404,8 +493,129 @@ enum SkillCommands {
         #[arg(short, long, default_value = "10")]
         limit: usize,
     },
+    /// Hybrid search across the Skills Cloud (FTS + alias + filters).
+    /// Use this in place of `search` for fuzzy / on-demand dispatch.
+    Find {
+        /// Search query (partial name, intent, alias)
+        query: String,
+        /// Maximum results
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+        /// Filter by kind: skill | agent | command | workflow
+        #[arg(short, long)]
+        kind: Option<String>,
+        /// Filter by source plugin name
+        #[arg(short, long)]
+        plugin: Option<String>,
+        /// Filter by tag (e.g. "af-phase:verify", "domain:code-dev")
+        #[arg(short, long)]
+        tag: Option<String>,
+        /// Include deprecated skills in results
+        #[arg(long)]
+        include_deprecated: bool,
+    },
+    /// Print a skill's content formatted for context injection.
+    /// Accepts a numeric id OR a fuzzy name; on fuzzy, picks the top match.
+    Inject {
+        /// Skill id (numeric) or fuzzy name
+        target: String,
+        /// Always pick the top match without confirmation when fuzzy
+        #[arg(long)]
+        top: bool,
+    },
+    /// Materialize a kind:agent skill to ~/.claude/agents/<plugin>__<name>.md
+    /// so Claude Code's harness picks it up natively next session.
+    Materialize {
+        /// Skill id
+        id: i64,
+        /// Override target directory (default: ~/.claude/agents/)
+        #[arg(long)]
+        dir: Option<String>,
+    },
+    /// Forget a materialization (deletes the .md and the DB row).
+    Dematerialize {
+        /// Skill id
+        id: i64,
+    },
+    /// Manage user-defined aliases for a skill.
+    Alias {
+        #[command(subcommand)]
+        sub: AliasCommands,
+    },
+    /// Manage skill bundles (named collections).
+    Bundle {
+        #[command(subcommand)]
+        sub: BundleCommands,
+    },
+    /// Walk ~/.claude/plugins/installed_plugins.json and ingest every
+    /// plugin's SKILL.md / agents / commands into the Skills Cloud.
+    ImportPlugins {
+        /// Show what would happen without writing
+        #[arg(long)]
+        dry_run: bool,
+        /// Only import this plugin (matches the bare plugin name)
+        #[arg(short, long)]
+        plugin: Option<String>,
+        /// Only import plugins from this marketplace
+        #[arg(short, long)]
+        marketplace: Option<String>,
+        /// Source override: PLUGIN=PATH (repeatable). Replaces the plugin
+        /// cache install path. Used for canonical sources like ralph.
+        #[arg(long = "source-override")]
+        source_overrides: Vec<String>,
+    },
 }
 
+// User-driven alias management. Auto-aliases come from the importer and
+// don't surface here.
+#[derive(Subcommand)]
+enum AliasCommands {
+    /// Add an alias to a skill (confidence defaults to 1.0).
+    Add {
+        skill_id: i64,
+        alias: String,
+        #[arg(short, long, default_value = "1.0")]
+        confidence: f64,
+    },
+    /// Remove a single alias from a skill.
+    Rm { skill_id: i64, alias: String },
+    /// List all aliases attached to a skill.
+    List { skill_id: i64 },
+    /// Resolve a fuzzy alias string into ranked candidate skills.
+    Resolve {
+        query: String,
+        #[arg(short, long, default_value = "10")]
+        limit: usize,
+    },
+}
+
+// Bundle CRUD + member ops.
+#[derive(Subcommand)]
+enum BundleCommands {
+    /// List bundles with member counts.
+    List {
+        #[arg(short, long, default_value = "50")]
+        limit: usize,
+    },
+    /// Create (or upsert by name) a bundle.
+    Create {
+        name: String,
+        #[arg(short, long)]
+        description: Option<String>,
+    },
+    /// Show bundle metadata.
+    Get { id: i64 },
+    /// Delete a bundle (cascades members).
+    Delete { id: i64 },
+    /// Show member skill ids.
+    Members { id: i64 },
+    /// Add a skill to a bundle.
+    Add { bundle_id: i64, skill_id: i64 },
+    /// Remove a skill from a bundle.
+    Remove { bundle_id: i64, skill_id: i64 },
+}
+
+/// Subcommands for `kleos-cli handoff` -- session state dump, restore, and garbage collection.
 #[derive(Subcommand)]
 enum HandoffCommands {
     /// Store a session handoff
@@ -500,6 +710,7 @@ enum HandoffCommands {
     },
 }
 
+/// HTTP client wrapper that handles auth, session capture, and base-URL composition.
 pub(crate) struct Client {
     http: reqwest::Client,
     base_url: String,
@@ -507,7 +718,9 @@ pub(crate) struct Client {
     pub(crate) signer: Option<kleos_lib::auth_piv::RequestSigner>,
 }
 
+// Client constructor and HTTP helpers.
 impl Client {
+    /// Constructs a new `Client` with the given base URL, optional API key, and optional PIV signer.
     fn new(
         base_url: String,
         api_key: Option<String>,
@@ -521,6 +734,7 @@ impl Client {
         }
     }
 
+    /// Applies PIV-signed headers or bearer-token auth to a pending request.
     pub(crate) fn apply_auth(
         &self,
         req: reqwest::RequestBuilder,
@@ -549,6 +763,7 @@ impl Client {
         req
     }
 
+    /// Reads any session token issued by the server and caches it in the signer.
     pub(crate) fn capture_session(&self, resp: &reqwest::Response) {
         if let Some(signer) = &self.signer {
             if let Some(token) = resp.headers().get("x-kleos-session-issued") {
@@ -559,6 +774,7 @@ impl Client {
         }
     }
 
+    /// Sends an authenticated GET request and returns the parsed JSON body.
     async fn get(&self, path: &str) -> Result<Value, String> {
         let url = format!("{}{}", self.base_url, path);
         let req = self.http.get(&url);
@@ -571,6 +787,7 @@ impl Client {
         self.handle_response("GET", &url, resp).await
     }
 
+    /// Sends an authenticated POST request with a JSON body and returns the parsed JSON response.
     async fn post(&self, path: &str, body: Value) -> Result<Value, String> {
         let url = format!("{}{}", self.base_url, path);
         let body_bytes = serde_json::to_vec(&body).unwrap_or_default();
@@ -588,6 +805,7 @@ impl Client {
         self.handle_response("POST", &url, resp).await
     }
 
+    /// Sends an authenticated DELETE request and returns the parsed JSON response.
     async fn delete(&self, path: &str) -> Result<Value, String> {
         let url = format!("{}{}", self.base_url, path);
         let req = self.http.delete(&url);
@@ -600,6 +818,57 @@ impl Client {
         self.handle_response("DELETE", &url, resp).await
     }
 
+    /// Sends an authenticated multipart POST request and returns the parsed JSON response.
+    async fn post_multipart(
+        &self,
+        path: &str,
+        form: reqwest::multipart::Form,
+    ) -> Result<Value, String> {
+        let url = format!("{}{}", self.base_url, path);
+        let req = self.http.post(&url).multipart(form);
+        let req = self.apply_auth(req, "POST", path, b"");
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format_reqwest_error("POST", &url, &e))?;
+        self.capture_session(&resp);
+        self.handle_response("POST", &url, resp).await
+    }
+
+    /// Sends an authenticated GET and returns the raw bytes, filename, and content-type.
+    async fn get_bytes(&self, path: &str) -> Result<(Vec<u8>, String, String), String> {
+        let url = format!("{}{}", self.base_url, path);
+        let req = self.http.get(&url);
+        let req = self.apply_auth(req, "GET", path, b"");
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format_reqwest_error("GET", &url, &e))?;
+        self.capture_session(&resp);
+        let status = resp.status();
+        if !status.is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, text));
+        }
+        let content_type = resp
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("application/octet-stream")
+            .to_string();
+        let filename = resp
+            .headers()
+            .get("content-disposition")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| {
+                v.split("filename=").nth(1).map(|f| f.trim_matches('"').to_string())
+            })
+            .unwrap_or_else(|| "artifact".to_string());
+        let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+        Ok((bytes.to_vec(), filename, content_type))
+    }
+
+    /// Interprets an HTTP response, returning parsed JSON on success or an error string on failure.
     async fn handle_response(
         &self,
         method: &str,
@@ -649,6 +918,7 @@ impl Client {
         }
     }
 
+    /// Sends a GET request with a per-call timeout; returns an empty object on 404.
     pub(crate) async fn get_with_timeout(
         &self,
         path: &str,
@@ -672,6 +942,7 @@ impl Client {
         }
     }
 
+    /// Sends a POST request with a per-call timeout; useful for fire-and-forget activity reports.
     pub(crate) async fn post_with_timeout(
         &self,
         path: &str,
@@ -700,6 +971,7 @@ impl Client {
         }
     }
 
+    /// Returns the agent label from the PIV signer, or "claude-code" when no signer is configured.
     pub(crate) fn agent_label(&self) -> String {
         self.signer
             .as_ref()
@@ -708,10 +980,12 @@ impl Client {
     }
 }
 
+/// Formats a reqwest transport error with method and URL context.
 fn format_reqwest_error(method: &str, url: &str, err: &reqwest::Error) -> String {
     format!("{} {} failed: {}", method, url, format_error_chain(err))
 }
 
+/// Walks the error source chain and concatenates messages with " -> " separators.
 fn format_error_chain<E: std::error::Error + ?Sized>(err: &E) -> String {
     let mut out = err.to_string();
     let mut source: Option<&dyn std::error::Error> = err.source();
@@ -724,6 +998,7 @@ fn format_error_chain<E: std::error::Error + ?Sized>(err: &E) -> String {
     out
 }
 
+/// Returns up to 512 bytes of the response body as a UTF-8 string for error messages.
 fn body_excerpt(bytes: &[u8]) -> String {
     const MAX: usize = 512;
     let s = String::from_utf8_lossy(bytes);
@@ -737,6 +1012,7 @@ fn body_excerpt(bytes: &[u8]) -> String {
     format!("{}... ({} bytes total)", &s[..end], bytes.len())
 }
 
+/// Truncates a string to the given byte length.
 fn truncate(s: &str, max: usize) -> &str {
     if s.len() <= max {
         s
@@ -745,6 +1021,7 @@ fn truncate(s: &str, max: usize) -> &str {
     }
 }
 
+/// Extracts a JSON value as a string, coercing integers.
 fn value_as_string(value: Option<&Value>) -> Option<String> {
     value.and_then(|v| {
         v.as_str()
@@ -754,6 +1031,7 @@ fn value_as_string(value: Option<&Value>) -> Option<String> {
     })
 }
 
+/// Reads the API key from KLEOS_API_KEY or ENGRAM_API_KEY env vars.
 fn direct_env_api_key() -> Option<String> {
     std::env::var("KLEOS_API_KEY")
         .ok()
@@ -765,6 +1043,7 @@ fn direct_env_api_key() -> Option<String> {
         })
 }
 
+/// CLI entry point -- parses args and dispatches subcommands.
 #[tokio::main]
 async fn main() {
     kleos_lib::config::migrate_env_prefix();
@@ -1193,9 +1472,22 @@ async fn main() {
                 }
             }
         },
+
+        Commands::User(user_cmd) => {
+            handle_user_command(&client, user_cmd).await;
+        }
+
+        Commands::Invite(invite_cmd) => {
+            handle_invite_command(&client, invite_cmd).await;
+        }
+
+        Commands::Artifact(artifact_cmd) => {
+            handle_artifact_command(&client, artifact_cmd).await;
+        }
     }
 }
 
+/// Initializes a new identity key pair and registers it with the server.
 async fn handle_identity_init(
     client: &Client,
     host_label: &str,
@@ -1302,6 +1594,7 @@ async fn handle_identity_init(
     }
 }
 
+/// Ingests text or a file into Kleos as a new memory.
 async fn handle_ingest(
     client: &Client,
     text: &Option<String>,
@@ -1462,6 +1755,7 @@ async fn handle_ingest(
     }
 }
 
+/// Dispatches background job subcommands (stats, list, retry, cancel).
 async fn handle_jobs_command(client: &Client, cmd: &JobsCommands) {
     match cmd {
         JobsCommands::Stats => match client.get("/jobs/stats").await {
@@ -1540,6 +1834,7 @@ async fn handle_jobs_command(client: &Client, cmd: &JobsCommands) {
     }
 }
 
+/// Dispatches skill subcommands (search, get, capture, execute, etc.).
 async fn handle_skill_command(client: &Client, cmd: &SkillCommands) {
     match cmd {
         SkillCommands::Search { query, limit } => {
@@ -1784,9 +2079,517 @@ async fn handle_skill_command(client: &Client, cmd: &SkillCommands) {
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
+
+        SkillCommands::Find {
+            query,
+            limit,
+            kind,
+            plugin,
+            tag,
+            include_deprecated,
+        } => {
+            let mut body = json!({ "query": query, "limit": limit });
+            if let Some(k) = kind {
+                body["kind"] = json!(k);
+            }
+            if let Some(p) = plugin {
+                body["plugin"] = json!(p);
+            }
+            if let Some(t) = tag {
+                body["tag"] = json!(t);
+            }
+            if *include_deprecated {
+                body["include_deprecated"] = json!(true);
+            }
+            match client.post("/skills/find", body).await {
+                Ok(v) => {
+                    let results = v
+                        .get("results")
+                        .and_then(|r| r.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+                    if results.is_empty() {
+                        println!("No results.");
+                    }
+                    for item in &results {
+                        let skill = item.get("skill").cloned().unwrap_or(item.clone());
+                        let id = value_as_string(skill.get("id"))
+                            .unwrap_or_else(|| "?".to_string());
+                        let score = item.get("score").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                        let name = skill.get("name").and_then(|x| x.as_str()).unwrap_or("?");
+                        let kind = skill
+                            .get("kind")
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("skill");
+                        let plugin = skill
+                            .get("source_plugin")
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("");
+                        let desc = skill
+                            .get("description")
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("");
+                        let plugin_str = if plugin.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" [{}]", plugin)
+                        };
+                        println!(
+                            "#{} ({}) score:{:.3}{} {} -- {}",
+                            id,
+                            kind,
+                            score,
+                            plugin_str,
+                            name,
+                            truncate(desc, 80)
+                        );
+                    }
+                }
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+
+        SkillCommands::Inject { target, top } => {
+            // Resolve target -> skill id. If parseable as i64, use as id;
+            // otherwise run a fuzzy find and pick the top result.
+            let id: Option<i64> = match target.parse::<i64>() {
+                Ok(n) => Some(n),
+                Err(_) => {
+                    let body =
+                        json!({ "query": target, "limit": if *top { 1 } else { 5 } });
+                    match client.post("/skills/find", body).await {
+                        Ok(v) => {
+                            let results = v
+                                .get("results")
+                                .and_then(|r| r.as_array())
+                                .cloned()
+                                .unwrap_or_default();
+                            if results.is_empty() {
+                                eprintln!("No skill matches '{}'", target);
+                                None
+                            } else if *top || results.len() == 1 {
+                                results
+                                    .first()
+                                    .and_then(|r| r.get("skill"))
+                                    .and_then(|s| s.get("id"))
+                                    .and_then(|x| x.as_i64())
+                            } else {
+                                // Print candidates and let the caller re-run with --top
+                                // or with the explicit numeric id.
+                                println!("Multiple matches; rerun with --top to inject the first, or pass the explicit id:");
+                                for r in &results {
+                                    let s = r.get("skill").cloned().unwrap_or(r.clone());
+                                    let sid = value_as_string(s.get("id"))
+                                        .unwrap_or_else(|| "?".to_string());
+                                    let name =
+                                        s.get("name").and_then(|x| x.as_str()).unwrap_or("?");
+                                    let plugin = s
+                                        .get("source_plugin")
+                                        .and_then(|x| x.as_str())
+                                        .unwrap_or("");
+                                    println!("  #{} {} [{}]", sid, name, plugin);
+                                }
+                                None
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Error: {}", e);
+                            None
+                        }
+                    }
+                }
+            };
+            if let Some(id) = id {
+                match client.get(&format!("/skills/{}", id)).await {
+                    Ok(v) => {
+                        let name = v.get("name").and_then(|x| x.as_str()).unwrap_or("?");
+                        let kind = v.get("kind").and_then(|x| x.as_str()).unwrap_or("skill");
+                        let plugin = v
+                            .get("source_plugin")
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("");
+                        let desc = v
+                            .get("description")
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("");
+                        let code = v.get("code").and_then(|x| x.as_str()).unwrap_or("");
+                        // Markdown-formatted output ready to paste into a
+                        // session as a system / user message.
+                        println!("# Skill: {} (#{}, kind:{})", name, id, kind);
+                        if !plugin.is_empty() {
+                            println!("Source plugin: {}", plugin);
+                        }
+                        if !desc.is_empty() {
+                            println!();
+                            println!("> {}", desc);
+                        }
+                        println!();
+                        println!("---");
+                        println!();
+                        println!("{}", code);
+                    }
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+        }
+
+        SkillCommands::Materialize { id, dir } => {
+            // Fetch the skill, reconstruct the agent .md (frontmatter from
+            // metadata + body from `code`), write to disk, then POST the
+            // materialization record so the DB tracks it.
+            match client.get(&format!("/skills/{}", id)).await {
+                Ok(v) => {
+                    let kind = v.get("kind").and_then(|x| x.as_str()).unwrap_or("skill");
+                    if kind != "agent" {
+                        eprintln!(
+                            "Skill #{} kind is '{}', not 'agent' -- materialize is for agents only.",
+                            id, kind
+                        );
+                        return;
+                    }
+                    let target_dir = dir.clone().unwrap_or_else(|| {
+                        std::env::var("HOME")
+                            .map(|h| format!("{}/.claude/agents", h))
+                            .unwrap_or_else(|_| "./agents".to_string())
+                    });
+                    let plugin = v
+                        .get("source_plugin")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("");
+                    let name = v.get("name").and_then(|x| x.as_str()).unwrap_or("agent");
+                    let filename = if plugin.is_empty() {
+                        format!("{}.md", name)
+                    } else {
+                        format!("{}__{}.md", plugin, name)
+                    };
+                    let path = format!("{}/{}", target_dir, filename);
+                    if let Err(e) = std::fs::create_dir_all(&target_dir) {
+                        eprintln!("Failed to create {}: {}", target_dir, e);
+                        return;
+                    }
+                    // Reconstruct: prefer metadata['frontmatter'] when the
+                    // importer stored the original; otherwise synthesize a
+                    // minimal frontmatter from name + description.
+                    let body = v.get("code").and_then(|x| x.as_str()).unwrap_or("");
+                    let desc = v
+                        .get("description")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("");
+                    let meta_fm = v
+                        .get("metadata")
+                        .and_then(|x| x.as_str())
+                        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+                        .and_then(|j| j.get("frontmatter").cloned());
+                    let content = if let Some(fm) = meta_fm.and_then(|f| f.as_str().map(String::from)) {
+                        format!("---\n{}\n---\n\n{}", fm.trim(), body)
+                    } else {
+                        format!(
+                            "---\nname: {}\ndescription: {}\n---\n\n{}",
+                            name, desc, body
+                        )
+                    };
+                    let hash = sha256_hex(&content);
+                    if let Err(e) = std::fs::write(&path, &content) {
+                        eprintln!("Failed to write {}: {}", path, e);
+                        return;
+                    }
+                    let post_body = json!({
+                        "target_path": path,
+                        "content_hash": hash,
+                    });
+                    match client
+                        .post(&format!("/skills/{}/materialize", id), post_body)
+                        .await
+                    {
+                        Ok(_) => {
+                            println!(
+                                "Materialized #{} -> {} (Task subagent available next session)",
+                                id, path
+                            );
+                        }
+                        Err(e) => eprintln!("Wrote file but failed to record: {}", e),
+                    }
+                }
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+
+        SkillCommands::Dematerialize { id } => {
+            match client.get(&format!("/skills/{}/materialization", id)).await {
+                Ok(v) => {
+                    if let Some(m) = v.get("materialization") {
+                        if let Some(path) = m.get("target_path").and_then(|x| x.as_str()) {
+                            if let Err(e) = std::fs::remove_file(path) {
+                                if e.kind() != std::io::ErrorKind::NotFound {
+                                    eprintln!("Failed to remove {}: {}", path, e);
+                                }
+                            }
+                            // Even if file was already gone, drop the row.
+                            match client
+                                .delete(&format!("/skills/{}/materialization", id))
+                                .await
+                            {
+                                Ok(_) => println!("Dematerialized #{} (removed {})", id, path),
+                                Err(e) => eprintln!("Error clearing record: {}", e),
+                            }
+                        } else {
+                            println!("Skill #{} has no materialization on file.", id);
+                        }
+                    } else {
+                        println!("Skill #{} has no materialization on file.", id);
+                    }
+                }
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+
+        SkillCommands::Alias { sub } => match sub {
+            AliasCommands::Add {
+                skill_id,
+                alias,
+                confidence,
+            } => {
+                let body = json!({ "alias": alias, "confidence": confidence });
+                match client
+                    .post(&format!("/skills/{}/aliases", skill_id), body)
+                    .await
+                {
+                    Ok(_) => println!("Added alias '{}' to skill #{}", alias, skill_id),
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            AliasCommands::Rm { skill_id, alias } => {
+                match client
+                    .delete(&format!("/skills/{}/aliases/{}", skill_id, alias))
+                    .await
+                {
+                    Ok(_) => println!("Removed alias '{}' from skill #{}", alias, skill_id),
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            AliasCommands::List { skill_id } => {
+                match client.get(&format!("/skills/{}/aliases", skill_id)).await {
+                    Ok(v) => {
+                        let aliases = v
+                            .get("aliases")
+                            .and_then(|r| r.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+                        if aliases.is_empty() {
+                            println!("No aliases.");
+                        }
+                        for a in &aliases {
+                            let alias =
+                                a.get("alias").and_then(|x| x.as_str()).unwrap_or("?");
+                            let confidence =
+                                a.get("confidence").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                            let source =
+                                a.get("source").and_then(|x| x.as_str()).unwrap_or("?");
+                            println!("  {} (conf:{:.2} src:{})", alias, confidence, source);
+                        }
+                    }
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            AliasCommands::Resolve { query, limit } => {
+                let body = json!({ "query": query, "limit": limit });
+                match client.post("/skills/aliases/resolve", body).await {
+                    Ok(v) => {
+                        let matches = v
+                            .get("matches")
+                            .and_then(|r| r.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+                        if matches.is_empty() {
+                            println!("No alias matches.");
+                        }
+                        for m in &matches {
+                            let sid = value_as_string(m.get("skill_id"))
+                                .unwrap_or_else(|| "?".to_string());
+                            let alias =
+                                m.get("alias").and_then(|x| x.as_str()).unwrap_or("?");
+                            let conf =
+                                m.get("confidence").and_then(|x| x.as_f64()).unwrap_or(0.0);
+                            println!("  -> #{} via '{}' (conf:{:.2})", sid, alias, conf);
+                        }
+                    }
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+        },
+
+        SkillCommands::ImportPlugins {
+            dry_run,
+            plugin,
+            marketplace,
+            source_overrides,
+        } => {
+            let cfg = import_plugins::load_config();
+            let mut overrides: std::collections::BTreeMap<String, std::path::PathBuf> =
+                std::collections::BTreeMap::new();
+            for (k, v) in cfg.source_overrides {
+                overrides.insert(k, std::path::PathBuf::from(shellexpand_home(&v)));
+            }
+            for raw in source_overrides {
+                if let Some((k, v)) = raw.split_once('=') {
+                    overrides.insert(
+                        k.to_string(),
+                        std::path::PathBuf::from(shellexpand_home(v)),
+                    );
+                } else {
+                    eprintln!(
+                        "Warning: --source-override expects PLUGIN=PATH, got: {}",
+                        raw
+                    );
+                }
+            }
+            // Match arms see `cmd` by ref so primitive / Option fields are
+            // borrows; clone or deref into ImportArgs which owns its fields.
+            let args = import_plugins::ImportArgs {
+                dry_run: *dry_run,
+                plugin_filter: plugin.clone(),
+                marketplace_filter: marketplace.clone(),
+                source_overrides: overrides,
+            };
+            import_plugins::run(client, args).await;
+        }
+
+        SkillCommands::Bundle { sub } => match sub {
+            BundleCommands::List { limit } => {
+                match client.get(&format!("/bundles?limit={}", limit)).await {
+                    Ok(v) => {
+                        let bundles = v
+                            .get("bundles")
+                            .and_then(|r| r.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+                        if bundles.is_empty() {
+                            println!("No bundles.");
+                        }
+                        for b in &bundles {
+                            let bundle = b.get("bundle").cloned().unwrap_or(b.clone());
+                            let bid = value_as_string(bundle.get("id"))
+                                .unwrap_or_else(|| "?".to_string());
+                            let name =
+                                bundle.get("name").and_then(|x| x.as_str()).unwrap_or("?");
+                            let n =
+                                b.get("member_count").and_then(|x| x.as_i64()).unwrap_or(0);
+                            let auto = bundle
+                                .get("auto_generated")
+                                .and_then(|x| x.as_bool())
+                                .unwrap_or(false);
+                            let suffix = if auto { " [auto]" } else { "" };
+                            println!("#{} {} ({} members){}", bid, name, n, suffix);
+                        }
+                    }
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            BundleCommands::Create { name, description } => {
+                let body = json!({ "name": name, "description": description });
+                match client.post("/bundles", body).await {
+                    Ok(v) => {
+                        let id = v.get("id").and_then(|x| x.as_i64()).unwrap_or(0);
+                        println!("Created bundle #{}: {}", id, name);
+                    }
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            BundleCommands::Get { id } => {
+                match client.get(&format!("/bundles/{}", id)).await {
+                    Ok(v) => println!("{}", serde_json::to_string_pretty(&v).unwrap()),
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            BundleCommands::Delete { id } => {
+                match client.delete(&format!("/bundles/{}", id)).await {
+                    Ok(_) => println!("Deleted bundle #{}", id),
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            BundleCommands::Members { id } => {
+                match client.get(&format!("/bundles/{}/skills", id)).await {
+                    Ok(v) => {
+                        let ids = v
+                            .get("skill_ids")
+                            .and_then(|r| r.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+                        if ids.is_empty() {
+                            println!("No members.");
+                        }
+                        for sid in &ids {
+                            if let Some(n) = sid.as_i64() {
+                                println!("  #{}", n);
+                            }
+                        }
+                    }
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            BundleCommands::Add {
+                bundle_id,
+                skill_id,
+            } => {
+                let body = json!({ "skill_id": skill_id });
+                match client
+                    .post(&format!("/bundles/{}/skills", bundle_id), body)
+                    .await
+                {
+                    Ok(_) => println!("Added skill #{} to bundle #{}", skill_id, bundle_id),
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+            BundleCommands::Remove {
+                bundle_id,
+                skill_id,
+            } => {
+                match client
+                    .delete(&format!("/bundles/{}/skills/{}", bundle_id, skill_id))
+                    .await
+                {
+                    Ok(_) => println!("Removed skill #{} from bundle #{}", skill_id, bundle_id),
+                    Err(e) => eprintln!("Error: {}", e),
+                }
+            }
+        },
     }
 }
 
+// SHA-256 hex helper used by materialize to fingerprint on-disk content.
+// Kept inline (rather than pulled into a util module) because this is the
+// only place it's used.
+fn sha256_hex(s: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(s.as_bytes());
+    let digest = h.finalize();
+    hex_encode(&digest)
+}
+
+// Expand a leading `~/` to $HOME for paths read out of skill-import.toml
+// or --source-override flags. Plain paths and absolute paths pass through.
+fn shellexpand_home(s: &str) -> String {
+    if let Some(rest) = s.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return format!("{}/{}", home, rest);
+        }
+    }
+    s.to_string()
+}
+
+/// Encodes a byte slice as lowercase hexadecimal.
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    out
+}
+
+/// Dispatches credential vault subcommands (get, set, delete, list).
 async fn handle_cred_command(client: &Client, cmd: &CredCommands) {
     match cmd {
         CredCommands::Get {
@@ -2109,6 +2912,7 @@ async fn handle_cred_command(client: &Client, cmd: &CredCommands) {
     }
 }
 
+/// Detects the project name from git remote or directory name.
 fn detect_project(dir: Option<&str>) -> Option<String> {
     let dir = dir
         .map(std::path::PathBuf::from)
@@ -2137,6 +2941,7 @@ fn detect_project(dir: Option<&str>) -> Option<String> {
     dir.file_name().map(|n| n.to_string_lossy().to_string())
 }
 
+/// Detects the current git branch name.
 fn detect_branch(dir: Option<&str>) -> Option<String> {
     let dir = dir.unwrap_or(".");
     let output = std::process::Command::new("git")
@@ -2153,6 +2958,7 @@ fn detect_branch(dir: Option<&str>) -> Option<String> {
     None
 }
 
+/// Detects the hostname from env or system command.
 fn detect_host() -> String {
     if let Ok(val) = std::env::var("SESSION_HANDOFF_HOST") {
         if !val.is_empty() {
@@ -2174,10 +2980,12 @@ fn detect_host() -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
+/// Returns the agent identifier from SESSION_HANDOFF_AGENT env var.
 fn detect_agent() -> String {
     std::env::var("SESSION_HANDOFF_AGENT").unwrap_or_else(|_| "unknown".to_string())
 }
 
+/// Returns the model identifier from env vars (SESSION_HANDOFF_MODEL, ANTHROPIC_MODEL, MODEL_ID).
 fn detect_model() -> Option<String> {
     std::env::var("SESSION_HANDOFF_MODEL")
         .or_else(|_| std::env::var("ANTHROPIC_MODEL"))
@@ -2186,6 +2994,7 @@ fn detect_model() -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// Dispatches session handoff subcommands (dump, restore, list, gc, etc.).
 async fn handle_handoff_command(client: &Client, cmd: &HandoffCommands) {
     match cmd {
         HandoffCommands::Dump {
@@ -2588,6 +3397,214 @@ async fn handle_handoff_command(client: &Client, cmd: &HandoffCommands) {
                     let remaining = v.get("remaining").and_then(|r| r.as_i64()).unwrap_or(0);
                     println!("Deleted {} handoffs. Remaining: {}", deleted, remaining);
                 }
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+    }
+}
+
+/// Dispatches `kleos-cli user` subcommands to the /users API.
+async fn handle_user_command(client: &Client, cmd: &UserCommands) {
+    match cmd {
+        UserCommands::Create {
+            username,
+            email,
+            role,
+        } => {
+            let mut body = json!({ "username": username });
+            if let Some(e) = email {
+                body["email"] = json!(e);
+            }
+            if let Some(r) = role {
+                body["role"] = json!(r);
+            }
+            match client.post("/users", body).await {
+                Ok(v) => {
+                    let id = v.get("id").and_then(|i| i.as_i64()).unwrap_or(0);
+                    let name = v.get("username").and_then(|s| s.as_str()).unwrap_or("?");
+                    let role = v.get("role").and_then(|s| s.as_str()).unwrap_or("?");
+                    println!("Created user #{} (username: {}, role: {})", id, name, role);
+                }
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+
+        UserCommands::List { include_inactive } => {
+            let path = if *include_inactive {
+                "/users?include_inactive=true".to_string()
+            } else {
+                "/users".to_string()
+            };
+            match client.get(&path).await {
+                Ok(v) => {
+                    let users = v.get("users").and_then(|u| u.as_array());
+                    match users {
+                        Some(users) if !users.is_empty() => {
+                            // Print a compact table: ID, username, role, status.
+                            for u in users {
+                                let id = u.get("id").and_then(|i| i.as_i64()).unwrap_or(0);
+                                let name =
+                                    u.get("username").and_then(|s| s.as_str()).unwrap_or("?");
+                                let role = u.get("role").and_then(|s| s.as_str()).unwrap_or("?");
+                                let active = u
+                                    .get("is_active")
+                                    .and_then(|b| b.as_bool())
+                                    .unwrap_or(false);
+                                let status = if active { "active" } else { "inactive" };
+                                println!("#{:<4} {:<20} {:<10} [{}]", id, name, role, status);
+                            }
+                        }
+                        _ => println!("No users found."),
+                    }
+                }
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+    }
+}
+
+/// Dispatches `kleos-cli invite` subcommands to the /identity-keys/invite API.
+async fn handle_invite_command(client: &Client, cmd: &InviteCommands) {
+    match cmd {
+        InviteCommands::Create { user_id, method } => {
+            let body = json!({ "user_id": user_id, "method": method });
+            match client.post("/identity-keys/invite", body).await {
+                Ok(v) => {
+                    let token = v.get("token").and_then(|s| s.as_str()).unwrap_or("?");
+                    let uid = v.get("user_id").and_then(|i| i.as_i64()).unwrap_or(0);
+                    let expires = v.get("expires_at").and_then(|s| s.as_str()).unwrap_or("?");
+                    // The raw token is displayed exactly once. Copy it now.
+                    println!("Enrollment invite created for user #{}:", uid);
+                    println!("  Token:   {}", token);
+                    println!("  Method:  {}", method);
+                    println!("  Expires: {}", expires);
+                    println!();
+                    println!("This token will not be shown again.");
+                }
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+    }
+}
+
+/// Dispatches artifact subcommands (upload, download, list, delete).
+async fn handle_artifact_command(client: &Client, cmd: &ArtifactCommands) {
+    match cmd {
+        ArtifactCommands::Upload {
+            memory_id,
+            file,
+            name,
+            artifact_type,
+            agent,
+        } => {
+            let path = std::path::Path::new(file);
+            if !path.exists() {
+                eprintln!("Error: file not found: {}", file);
+                return;
+            }
+            let data = match std::fs::read(path) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Error reading file: {}", e);
+                    return;
+                }
+            };
+            let filename = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            let mime = match path.extension().and_then(|e| e.to_str()) {
+                Some("md") => "text/markdown",
+                Some("txt") => "text/plain",
+                Some("json") => "application/json",
+                Some("yaml" | "yml") => "application/yaml",
+                Some("toml") => "application/toml",
+                Some("rs") => "text/x-rust",
+                Some("py") => "text/x-python",
+                Some("js") => "application/javascript",
+                Some("ts") => "application/typescript",
+                Some("html") => "text/html",
+                Some("css") => "text/css",
+                Some("png") => "image/png",
+                Some("jpg" | "jpeg") => "image/jpeg",
+                Some("pdf") => "application/pdf",
+                _ => "application/octet-stream",
+            }
+            .to_string();
+            let display_name = name.clone().unwrap_or_else(|| filename.clone());
+
+            let file_part = reqwest::multipart::Part::bytes(data)
+                .file_name(filename)
+                .mime_str(&mime)
+                .unwrap_or_else(|_| reqwest::multipart::Part::bytes(vec![]));
+
+            let mut form = reqwest::multipart::Form::new()
+                .part("file", file_part)
+                .text("name", display_name)
+                .text("agent", agent.clone());
+
+            if let Some(at) = artifact_type {
+                form = form.text("artifact_type", at.clone());
+            }
+
+            let api_path = format!("/artifacts/{}", memory_id);
+            match client.post_multipart(&api_path, form).await {
+                Ok(v) => {
+                    let id = v.get("id").and_then(|x| x.as_i64()).unwrap_or(0);
+                    let size = v.get("size_bytes").and_then(|x| x.as_i64()).unwrap_or(0);
+                    println!("Uploaded artifact #{} ({} bytes) -> memory #{}", id, size, memory_id);
+                }
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+
+        ArtifactCommands::List { memory_id } => {
+            match client.get(&format!("/artifacts/{}", memory_id)).await {
+                Ok(v) => {
+                    let artifacts = v.get("artifacts").and_then(|a| a.as_array());
+                    match artifacts {
+                        Some(arts) if !arts.is_empty() => {
+                            println!("Artifacts for memory #{}:", memory_id);
+                            for a in arts {
+                                let id = a.get("id").and_then(|x| x.as_i64()).unwrap_or(0);
+                                let fname = a.get("filename").and_then(|x| x.as_str()).unwrap_or("?");
+                                let mime = a.get("mime_type").and_then(|x| x.as_str()).unwrap_or("?");
+                                let size = a.get("size_bytes").and_then(|x| x.as_i64()).unwrap_or(0);
+                                println!("  #{} {} ({}, {} bytes)", id, fname, mime, size);
+                            }
+                        }
+                        _ => println!("No artifacts for memory #{}", memory_id),
+                    }
+                }
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+
+        ArtifactCommands::Get { id, output } => {
+            match client.get_bytes(&format!("/artifact/{}", id)).await {
+                Ok((data, filename, _content_type)) => {
+                    let out_path = match output.as_deref() {
+                        Some("-") => {
+                            use std::io::Write;
+                            std::io::stdout().write_all(&data).ok();
+                            return;
+                        }
+                        Some(p) => p.to_string(),
+                        None => filename,
+                    };
+                    match std::fs::write(&out_path, &data) {
+                        Ok(_) => println!("Downloaded artifact #{} -> {} ({} bytes)", id, out_path, data.len()),
+                        Err(e) => eprintln!("Error writing file: {}", e),
+                    }
+                }
+                Err(e) => eprintln!("Error: {}", e),
+            }
+        }
+
+        ArtifactCommands::Stats => {
+            match client.get("/artifacts/stats").await {
+                Ok(v) => println!("{}", serde_json::to_string_pretty(&v).unwrap()),
                 Err(e) => eprintln!("Error: {}", e),
             }
         }
