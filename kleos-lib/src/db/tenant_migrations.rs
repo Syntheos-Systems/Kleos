@@ -282,168 +282,209 @@ pub static TENANT_MIGRATIONS: &[TenantMigration] = &[
         description: "activity_log_table",
         up: apply_schema_v49_activity_log,
     },
+    // Skills Cloud: kind discrimination, source provenance for idempotent
+    // re-import of plugin content, fuzzy aliases, named bundles, and
+    // agent materialization tracking.
+    TenantMigration {
+        version: 50,
+        description: "skills_cloud_kind_aliases_bundles",
+        up: apply_schema_v50_skills_cloud,
+    },
 ];
 
+/// Tenant v1: applies the initial tenant schema from the embedded SQL file.
 fn apply_schema_v1(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v1.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v1 failed: {e}")))
 }
 
+/// Tenant v2: adds user_id shim to the scratchpad tables.
 fn apply_schema_v2_scratchpad_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v2_scratchpad.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v2 failed: {e}")))
 }
 
+/// Tenant v3: adds user_id shim to the sessions tables.
 fn apply_schema_v3_sessions_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v3_sessions.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v3 failed: {e}")))
 }
 
+/// Tenant v4: adds user_id shim to chiasm task tables.
 fn apply_schema_v4_chiasm_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v4_chiasm.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v4 failed: {e}")))
 }
 
+/// Tenant v5: adds user_id shim to the approvals tables.
 fn apply_schema_v5_approvals_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v5_approvals.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v5 failed: {e}")))
 }
 
+/// Tenant v6: adds user_id shim to the broca_actions tables.
 fn apply_schema_v6_broca_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v6_broca.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v6 failed: {e}")))
 }
 
+/// Tenant v7: adds user_id shim to the projects tables.
 fn apply_schema_v7_projects_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v7_projects.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v7 failed: {e}")))
 }
 
+/// Tenant v8: adds axon events and soma agents tables via activity shim.
 fn apply_schema_v8_activity_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v8_activity.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v8 failed: {e}")))
 }
 
+/// Tenant v9: adds user_id shim to webhooks tables.
 fn apply_schema_v9_webhooks_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v9_webhooks.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v9 failed: {e}")))
 }
 
+/// Tenant v10: adds user_id shim to ingestion tables.
 fn apply_schema_v10_ingestion_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v10_ingestion.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v10 failed: {e}")))
 }
 
+/// Tenant v11: adds the axon family tables.
 fn apply_schema_v11_axon_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v11_axon.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v11 failed: {e}")))
 }
 
+/// Tenant v12: adds the soma family tables.
 fn apply_schema_v12_soma_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v12_soma.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v12 failed: {e}")))
 }
 
+/// Tenant v13: adds the loom workflow and run tables.
 fn apply_schema_v13_loom_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v13_loom.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v13 failed: {e}")))
 }
 
+/// Tenant v14: adds the graph family tables (entities, edges, cooccurrences).
 fn apply_schema_v14_graph_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v14_graph.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v14 failed: {e}")))
 }
 
+/// Tenant v15: adds the thymus family tables (quality metrics, evaluations).
 fn apply_schema_v15_thymus_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v15_thymus.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v15 failed: {e}")))
 }
 
+/// Tenant v16: adds the portability family tables (preferences, conversations).
 fn apply_schema_v16_portability_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v16_portability.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v16 failed: {e}")))
 }
 
+/// Tenant v17: adds the growth reflections tables.
 fn apply_schema_v17_growth_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v17_growth.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v17 failed: {e}")))
 }
 
+/// Tenant v18: adds the intelligence family tables (current_state, consolidations).
 fn apply_schema_v18_intelligence_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v18_intelligence.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v18 failed: {e}")))
 }
 
+/// Tenant v19: adds the skills family tables (skill_records, FTS shadow).
 fn apply_schema_v19_skills_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v19_skills.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v19 failed: {e}")))
 }
 
+/// Tenant v20: adds user_id and FTS to the episodes tables.
 fn apply_schema_v20_episodes_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v20_episodes.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v20 failed: {e}")))
 }
 
+/// Tenant v21: adds the messages table and its FTS shadow.
 fn apply_schema_v21_messages_shim(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v21_messages.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v21 failed: {e}")))
 }
 
+/// Tenant v22: drops user_id from memories tables.
 fn apply_schema_v22_memories_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v22_memories_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v22 failed: {e}")))
 }
 
+/// Tenant v23: drops user_id from scratchpad tables.
 fn apply_schema_v23_scratchpad_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v23_scratchpad.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v23 failed: {e}")))
 }
 
+/// Tenant v24: drops user_id from sessions tables.
 fn apply_schema_v24_sessions_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v24_sessions_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v24 failed: {e}")))
 }
 
+/// Tenant v25: drops user_id from chiasm task tables.
 fn apply_schema_v25_chiasm_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v25_chiasm_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v25 failed: {e}")))
 }
 
+/// Tenant v26: drops user_id from approvals tables.
 fn apply_schema_v26_approvals_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v26_approvals_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v26 failed: {e}")))
 }
 
+/// Tenant v27: drops user_id from broca_actions tables.
 fn apply_schema_v27_broca_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v27_broca_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v27 failed: {e}")))
 }
 
+/// Tenant v28: drops user_id from projects tables.
 fn apply_schema_v28_projects_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v28_projects_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v28 failed: {e}")))
 }
 
+/// Tenant v29: drops user_id from activity tables.
 fn apply_schema_v29_activity_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v29_activity_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v29 failed: {e}")))
 }
 
+/// Tenant v30: drops user_id from webhooks tables.
 fn apply_schema_v30_webhooks_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v30_webhooks_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v30 failed: {e}")))
 }
 
+/// Tenant v31: drops user_id from axon tables.
 fn apply_schema_v31_axon_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v31_axon_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v31 failed: {e}")))
 }
 
+/// Tenant v32: drops user_id from growth reflections tables.
 fn apply_schema_v32_growth_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v32_growth_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v32 failed: {e}")))
 }
 
+/// Tenant v33: drops user_id from ingestion_hashes tables.
 fn apply_schema_v33_ingestion_hashes_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!(
         "../tenant/schema_v33_ingestion_hashes_drop.sql"
@@ -451,47 +492,56 @@ fn apply_schema_v33_ingestion_hashes_drop(conn: &Connection) -> Result<()> {
     .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v33 failed: {e}")))
 }
 
+/// Tenant v34: drops user_id from loom workflow tables.
 fn apply_schema_v34_loom_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v34_loom_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v34 failed: {e}")))
 }
 
+/// Tenant v35: drops user_id from graph cluster tables.
 fn apply_schema_v35_graph_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v35_graph_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v35 failed: {e}")))
 }
 
+/// Tenant v36: drops user_id from thymus tables.
 fn apply_schema_v36_thymus_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v36_thymus_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v36 failed: {e}")))
 }
 
+/// Tenant v37: drops user_id from portability tables including conversations.
 fn apply_schema_v37_portability_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v37_portability_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v37 failed: {e}")))?;
     drop_column_if_exists(conn, "conversations", "user_id", 37)
 }
 
+/// Tenant v38: drops user_id from intelligence tables.
 fn apply_schema_v38_intelligence_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v38_intelligence_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v38 failed: {e}")))
 }
 
+/// Tenant v39: drops user_id from skills tables.
 fn apply_schema_v39_skills_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v39_skills_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v39 failed: {e}")))
 }
 
+/// Tenant v40: drops user_id from episodes tables.
 fn apply_schema_v40_episodes_drop(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v40_episodes_drop.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v40 failed: {e}")))
 }
 
+/// Tenant v41: re-adds user_id to projects for shard/monolith schema parity.
 fn apply_schema_v41_projects_readd(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v41_projects_readd.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v41 failed: {e}")))
 }
 
+/// Tenant v42: re-adds user_id to broca_actions for shard/monolith schema parity.
 fn apply_schema_v42_broca_readd(conn: &Connection) -> Result<()> {
     if !table_has_column(conn, "broca_actions", "user_id")? {
         conn.execute_batch(
@@ -507,16 +557,19 @@ fn apply_schema_v42_broca_readd(conn: &Connection) -> Result<()> {
     .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v42 failed: {e}")))
 }
 
+/// Tenant v43: adds the handoffs table to each tenant shard.
 fn apply_schema_v43_handoffs(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v43_handoffs.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v43 failed: {e}")))
 }
 
+/// Tenant v44: brings full monolith schema parity to all tenant shards.
 fn apply_schema_v44_parity(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../tenant/schema_v44_parity.sql"))
         .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v44 failed: {e}")))
 }
 
+/// Tenant v45: creates the memory_chunks table for chunked memory storage.
 fn apply_schema_v45_memory_chunks(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS memory_chunks (
@@ -533,6 +586,7 @@ fn apply_schema_v45_memory_chunks(conn: &Connection) -> Result<()> {
     .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v45 failed: {e}")))
 }
 
+/// Tenant v46: creates the supervisor_injections table for rule-violation feedback.
 fn apply_schema_v46_supervisor_injections(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS supervisor_injections (
@@ -553,6 +607,7 @@ fn apply_schema_v46_supervisor_injections(conn: &Connection) -> Result<()> {
     .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v46 failed: {e}")))
 }
 
+/// Tenant v47: adds session_id column and partial index to gate_requests.
 fn apply_schema_v47_gate_requests_session_id(conn: &Connection) -> Result<()> {
     if !table_has_column(conn, "gate_requests", "session_id")? {
         conn.execute_batch("ALTER TABLE gate_requests ADD COLUMN session_id TEXT;")
@@ -567,6 +622,7 @@ fn apply_schema_v47_gate_requests_session_id(conn: &Connection) -> Result<()> {
     .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v47 index failed: {e}")))
 }
 
+/// Tenant v48: adds rule_id and claimed_at to supervisor_injections and rebuilds the pending index.
 fn apply_schema_v48_supervisor_injections_fix(conn: &Connection) -> Result<()> {
     if !table_has_column(conn, "supervisor_injections", "rule_id")? {
         conn.execute_batch(
@@ -593,6 +649,7 @@ fn apply_schema_v48_supervisor_injections_fix(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Tenant v49: creates the activity_log table for agent session activity tracking.
 fn apply_schema_v49_activity_log(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS activity_log (
@@ -619,6 +676,111 @@ fn apply_schema_v49_activity_log(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+// Skills Cloud (v50): adds plugin-import provenance, kind discrimination,
+// fuzzy aliases, bundles, and agent materialization tracking.
+//
+// The skill_records ADD COLUMN steps use table_has_column guards so the
+// migration is idempotent if a partially-applied state is encountered.
+/// Tenant v50: adds skills cloud tables (aliases, bundles, materializations) and provenance columns.
+fn apply_schema_v50_skills_cloud(conn: &Connection) -> Result<()> {
+    // Kind discrimination on existing skill rows. Default 'skill' so legacy
+    // content keeps current semantics; importer flips this to agent/command/
+    // workflow as it ingests plugin content.
+    if !table_has_column(conn, "skill_records", "kind")? {
+        conn.execute_batch(
+            "ALTER TABLE skill_records ADD COLUMN kind TEXT NOT NULL DEFAULT 'skill';",
+        )
+        .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v50 (kind) failed: {e}")))?;
+    }
+    // Source provenance lets the importer round-trip the same plugin content
+    // by (source_plugin, name) without manufacturing surrogate keys.
+    if !table_has_column(conn, "skill_records", "source_plugin")? {
+        conn.execute_batch("ALTER TABLE skill_records ADD COLUMN source_plugin TEXT;")
+            .map_err(|e| {
+                EngError::DatabaseMessage(format!(
+                    "tenant schema v50 (source_plugin) failed: {e}"
+                ))
+            })?;
+    }
+    if !table_has_column(conn, "skill_records", "source_path")? {
+        conn.execute_batch("ALTER TABLE skill_records ADD COLUMN source_path TEXT;")
+            .map_err(|e| {
+                EngError::DatabaseMessage(format!("tenant schema v50 (source_path) failed: {e}"))
+            })?;
+    }
+    if !table_has_column(conn, "skill_records", "content_hash")? {
+        conn.execute_batch("ALTER TABLE skill_records ADD COLUMN content_hash TEXT;")
+            .map_err(|e| {
+                EngError::DatabaseMessage(format!(
+                    "tenant schema v50 (content_hash) failed: {e}"
+                ))
+            })?;
+    }
+
+    // Indexes + new tables in one batch.
+    //
+    // The (source_plugin, name) UNIQUE index is partial: hand-captured skills
+    // (NULL source_plugin) are not constrained, only plugin-imported rows are.
+    //
+    // skill_aliases is the fuzzy-dispatch table. Multiple rows may share an
+    // alias when name collisions exist across plugins; the search layer ranks
+    // by confidence + trust_score.
+    //
+    // skill_bundles + skill_bundle_members let the importer auto-create a
+    // bundle per plugin and let users hand-curate cross-plugin collections.
+    //
+    // skill_materializations tracks which kind:agent skills have been
+    // written to ~/.claude/agents/<name>.md so we can detect drift between
+    // the Kleos source-of-truth and the disk copy.
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_skill_records_kind
+            ON skill_records(kind);
+         CREATE UNIQUE INDEX IF NOT EXISTS idx_skill_records_source
+            ON skill_records(source_plugin, name)
+            WHERE source_plugin IS NOT NULL;
+
+         CREATE TABLE IF NOT EXISTS skill_aliases (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             alias TEXT NOT NULL,
+             skill_id INTEGER NOT NULL REFERENCES skill_records(id) ON DELETE CASCADE,
+             confidence REAL NOT NULL DEFAULT 1.0,
+             source TEXT NOT NULL DEFAULT 'auto',
+             created_at TEXT NOT NULL DEFAULT (datetime('now')),
+             UNIQUE(alias, skill_id)
+         );
+         CREATE INDEX IF NOT EXISTS idx_skill_aliases_alias ON skill_aliases(alias);
+         CREATE INDEX IF NOT EXISTS idx_skill_aliases_skill ON skill_aliases(skill_id);
+
+         CREATE TABLE IF NOT EXISTS skill_bundles (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             name TEXT UNIQUE NOT NULL,
+             description TEXT,
+             auto_generated INTEGER NOT NULL DEFAULT 0,
+             created_at TEXT NOT NULL DEFAULT (datetime('now')),
+             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         CREATE TABLE IF NOT EXISTS skill_bundle_members (
+             bundle_id INTEGER NOT NULL REFERENCES skill_bundles(id) ON DELETE CASCADE,
+             skill_id INTEGER NOT NULL REFERENCES skill_records(id) ON DELETE CASCADE,
+             added_at TEXT NOT NULL DEFAULT (datetime('now')),
+             PRIMARY KEY (bundle_id, skill_id)
+         );
+         CREATE INDEX IF NOT EXISTS idx_skill_bundle_members_skill
+            ON skill_bundle_members(skill_id);
+
+         CREATE TABLE IF NOT EXISTS skill_materializations (
+             skill_id INTEGER PRIMARY KEY REFERENCES skill_records(id) ON DELETE CASCADE,
+             target_path TEXT NOT NULL,
+             materialized_at TEXT NOT NULL DEFAULT (datetime('now')),
+             content_hash_at_materialize TEXT NOT NULL
+         );",
+    )
+    .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v50 (tables) failed: {e}")))?;
+
+    Ok(())
+}
+
+/// Returns true if `column` exists in `table`; false otherwise.
 fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool> {
     let table = table.replace('\'', "''");
     let sql = format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1");
@@ -628,6 +790,7 @@ fn table_has_column(conn: &Connection, table: &str, column: &str) -> Result<bool
     Ok(count > 0)
 }
 
+/// Drops `column` from `table` if it exists; idempotent.
 fn drop_column_if_exists(conn: &Connection, table: &str, column: &str, version: i64) -> Result<()> {
     if table_has_column(conn, table, column)? {
         conn.execute_batch(&format!("ALTER TABLE {table} DROP COLUMN {column};"))
@@ -689,10 +852,12 @@ pub fn latest_version() -> i64 {
         .unwrap_or(0)
 }
 
+/// Unit and regression tests for the tenant migration chain.
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Verifies that a fresh in-memory database lands at the latest migration version.
     #[test]
     fn fresh_db_lands_at_latest() {
         let conn = Connection::open_in_memory().unwrap();
@@ -708,6 +873,7 @@ mod tests {
         assert_eq!(v, latest_version());
     }
 
+    /// Verifies that running migrations twice on the same database does not fail or duplicate records.
     #[test]
     fn idempotent() {
         let conn = Connection::open_in_memory().unwrap();
@@ -724,6 +890,7 @@ mod tests {
         assert_eq!(count, 1);
     }
 
+    /// Verifies that the memories table exists after applying tenant migration v1.
     #[test]
     fn memories_table_exists_after_v1() {
         let conn = Connection::open_in_memory().unwrap();
@@ -739,6 +906,7 @@ mod tests {
         assert_eq!(exists, 1);
     }
 
+    /// Verifies the scratchpad tables have user_id after v2 (and before v23 drops it).
     #[test]
     fn scratchpad_has_user_id_after_v2() {
         // v2 added the user_id shim; v23 drops it. This test locks v2's
@@ -933,6 +1101,7 @@ mod tests {
         assert_eq!(col_count, 0, "user_id column must be absent after v23");
     }
 
+    /// Verifies a v1-only database upgrades cleanly through v2.
     #[test]
     fn v1_only_db_upgrades_cleanly_to_v2() {
         let conn = Connection::open_in_memory().unwrap();
@@ -975,6 +1144,7 @@ mod tests {
         assert_eq!(post, 0);
     }
 
+    /// Verifies sessions tables have user_id after applying v3.
     #[test]
     fn sessions_has_user_id_after_v3() {
         // v3 added the user_id shim on sessions; v24 drops it. This test
@@ -1198,6 +1368,7 @@ mod tests {
         assert_eq!(col_count, 0, "user_id column must be absent after v24");
     }
 
+    /// Verifies chiasm task tables are usable after applying v4.
     #[test]
     fn chiasm_tasks_usable_after_v4() {
         // v4 introduced the chiasm tables with a user_id shim; v25 drops
@@ -1468,6 +1639,7 @@ mod tests {
         }
     }
 
+    /// Verifies a v3 database upgrades cleanly through v4.
     #[test]
     fn v3_db_upgrades_cleanly_to_v4() {
         let conn = Connection::open_in_memory().unwrap();
@@ -1511,6 +1683,7 @@ mod tests {
         assert_eq!(post, 2);
     }
 
+    /// Verifies approvals tables are usable after applying v5.
     #[test]
     fn approvals_usable_after_v5() {
         // v5 introduced approvals with a user_id shim; v26 drops it.
@@ -1734,6 +1907,7 @@ mod tests {
         assert_eq!(col_count, 0);
     }
 
+    /// Verifies a v4 database upgrades cleanly through v5.
     #[test]
     fn v4_db_upgrades_cleanly_to_v5() {
         let conn = Connection::open_in_memory().unwrap();
@@ -1777,6 +1951,7 @@ mod tests {
         assert_eq!(post, 1);
     }
 
+    /// Verifies broca_actions tables are usable after applying v6.
     #[test]
     fn broca_actions_usable_after_v6() {
         // v6 introduced broca_actions with a user_id shim; v27 drops it.
@@ -1979,6 +2154,7 @@ mod tests {
         assert_eq!(col_count, 0);
     }
 
+    /// Verifies a v5 database upgrades cleanly through v6.
     #[test]
     fn v5_db_upgrades_cleanly_to_v6() {
         let conn = Connection::open_in_memory().unwrap();
@@ -2024,6 +2200,7 @@ mod tests {
         assert_eq!(post, 1);
     }
 
+    /// Verifies projects tables are usable after applying v7.
     #[test]
     fn projects_usable_after_v7() {
         let conn = Connection::open_in_memory().unwrap();
@@ -2262,6 +2439,7 @@ mod tests {
         assert_eq!(col_count, 0);
     }
 
+    /// Verifies a v6 database upgrades cleanly through v7.
     #[test]
     fn v6_db_upgrades_cleanly_to_v7() {
         let conn = Connection::open_in_memory().unwrap();
@@ -2309,6 +2487,7 @@ mod tests {
         assert_eq!(post, 2);
     }
 
+    /// Verifies activity tables are usable after applying v8.
     #[test]
     fn activity_tables_usable_after_v8() {
         // v8 introduced axon_events and soma_agents with user_id shims; v29
@@ -2371,6 +2550,7 @@ mod tests {
         assert_eq!(agent_count, 1);
     }
 
+    /// Verifies a v7 database upgrades cleanly through v8.
     #[test]
     fn v7_db_upgrades_cleanly_to_v8() {
         let conn = Connection::open_in_memory().unwrap();
@@ -2420,6 +2600,7 @@ mod tests {
         assert_eq!(post, 2);
     }
 
+    /// Verifies webhooks tables are usable after applying v9.
     #[test]
     fn webhooks_usable_after_v9() {
         // v9 introduced webhooks with a user_id shim; v30 drops it.
@@ -2493,6 +2674,7 @@ mod tests {
         assert_eq!(dl_count, 1);
     }
 
+    /// Verifies a v8 database upgrades cleanly through v9.
     #[test]
     fn v8_db_upgrades_cleanly_to_v9() {
         let conn = Connection::open_in_memory().unwrap();
@@ -2544,6 +2726,7 @@ mod tests {
         assert_eq!(post, 2);
     }
 
+    /// Verifies ingestion tables are usable after applying v10.
     #[test]
     fn ingestion_tables_usable_after_v10() {
         // v10 introduced upload_sessions, upload_chunks, and ingestion_hashes
@@ -2626,6 +2809,7 @@ mod tests {
         assert_eq!(hash_count, 1);
     }
 
+    /// Verifies a v9 database upgrades cleanly through v10.
     #[test]
     fn v9_db_upgrades_cleanly_to_v10() {
         let conn = Connection::open_in_memory().unwrap();
@@ -2679,6 +2863,7 @@ mod tests {
         assert_eq!(post, 3);
     }
 
+    /// Verifies axon family tables are usable after applying v11.
     #[test]
     fn axon_family_usable_after_v11() {
         // v11 introduced axon_channels, axon_subscriptions, axon_cursors with
@@ -2755,6 +2940,7 @@ mod tests {
         assert_eq!(cur, 1);
     }
 
+    /// Verifies a v10 database upgrades cleanly through v11.
     #[test]
     fn v10_db_upgrades_cleanly_to_v11() {
         let conn = Connection::open_in_memory().unwrap();
@@ -2810,6 +2996,7 @@ mod tests {
         assert_eq!(post, 3);
     }
 
+    /// Verifies soma family tables are usable after applying v12.
     #[test]
     fn soma_family_usable_after_v12() {
         // v12 added soma_groups/soma_agent_groups/soma_agent_logs. v29 drops
@@ -2870,6 +3057,7 @@ mod tests {
         assert_eq!(l, 1);
     }
 
+    /// Verifies a v11 database upgrades cleanly through v12.
     #[test]
     fn v11_db_upgrades_cleanly_to_v12() {
         let conn = Connection::open_in_memory().unwrap();
@@ -2927,6 +3115,7 @@ mod tests {
         assert_eq!(post, 3);
     }
 
+    /// Verifies loom workflow tables are usable after applying v13.
     #[test]
     fn loom_family_usable_after_v13() {
         // v34 drops user_id from loom_workflows and loom_runs. Cap this test
@@ -3009,6 +3198,7 @@ mod tests {
         assert_eq!(lg, 1);
     }
 
+    /// Verifies a v12 database upgrades cleanly through v13.
     #[test]
     fn v12_db_upgrades_cleanly_to_v13() {
         let conn = Connection::open_in_memory().unwrap();
@@ -3070,6 +3260,7 @@ mod tests {
         assert_eq!(post, 4);
     }
 
+    /// Verifies graph family tables are usable after applying v14.
     #[test]
     fn graph_family_usable_after_v14() {
         let conn = Connection::open_in_memory().unwrap();
@@ -3202,6 +3393,7 @@ mod tests {
         assert_eq!(pd, 1);
     }
 
+    /// Verifies a v13 database upgrades cleanly through v14.
     #[test]
     fn v13_db_upgrades_cleanly_to_v14() {
         let conn = Connection::open_in_memory().unwrap();
@@ -3291,6 +3483,7 @@ mod tests {
         assert_eq!(post_tables, 3);
     }
 
+    /// Verifies thymus family tables are usable after applying v15.
     #[test]
     fn thymus_family_usable_after_v15() {
         // v15 introduced thymus tables with user_id shim; v36 drops user_id.
@@ -3380,6 +3573,7 @@ mod tests {
         assert_eq!(d, 1);
     }
 
+    /// Verifies a v14 database upgrades cleanly through v15.
     #[test]
     fn v14_db_upgrades_cleanly_to_v15() {
         let conn = Connection::open_in_memory().unwrap();
@@ -3447,6 +3641,7 @@ mod tests {
         assert_eq!(post, 5);
     }
 
+    /// Verifies portability family tables are usable after applying v16.
     #[test]
     fn portability_family_usable_after_v16() {
         // v16 introduced user_preferences and conversations with user_id shims;
@@ -3537,6 +3732,7 @@ mod tests {
         assert_eq!(state_value, "dark");
     }
 
+    /// Verifies a v15 database upgrades cleanly through v16.
     #[test]
     fn v15_db_upgrades_cleanly_to_v16() {
         let conn = Connection::open_in_memory().unwrap();
@@ -3627,6 +3823,7 @@ mod tests {
         assert_eq!(post_key, 1);
     }
 
+    /// Verifies growth reflections tables are usable after applying v17.
     #[test]
     fn reflections_usable_after_v17() {
         // v17 introduced reflections with a user_id shim; v32 drops it.
@@ -3687,6 +3884,7 @@ mod tests {
         assert_eq!(uid, 4);
     }
 
+    /// Verifies intelligence family tables are usable after applying v18.
     #[test]
     fn intelligence_family_usable_after_v18() {
         // v18 added the intelligence family; v38 drops user_id from all 7
@@ -3813,6 +4011,7 @@ mod tests {
         assert_eq!((c, s, cc, cl, r, tp, d, f), (1, 1, 1, 1, 1, 1, 1, 1));
     }
 
+    /// Verifies skills family tables are usable after applying v19.
     #[test]
     fn skills_family_usable_after_v19() {
         // v19 added the skills family; v39 drops user_id from skill_records.
@@ -3930,6 +4129,7 @@ mod tests {
         assert_eq!((s, t, d, e, j, tq), (1, 1, 1, 1, 1, 1));
     }
 
+    /// Verifies episodes tables have user_id and FTS after applying v20.
     #[test]
     fn episodes_user_id_and_fts_after_v20() {
         // v20 added the episodes family; v40 drops user_id from episodes.
@@ -3993,6 +4193,7 @@ mod tests {
         assert_eq!(fts_hits, 1, "episodes_fts insert trigger did not fire");
     }
 
+    /// Verifies messages table and its FTS shadow are usable after v21.
     #[test]
     fn messages_and_fts_usable_after_v21() {
         // v21 added messages + FTS. conversations.user_id shim was added in v16;
@@ -4060,6 +4261,7 @@ mod tests {
         assert_eq!(fts_hits, 1, "messages_fts insert trigger did not fire");
     }
 
+    /// Verifies a v2 database upgrades cleanly through v3.
     #[test]
     fn v2_db_upgrades_cleanly_to_v3() {
         let conn = Connection::open_in_memory().unwrap();

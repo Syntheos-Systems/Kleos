@@ -40,6 +40,7 @@ pub struct Migration {
 // Migration plan (returned by dry_run and migrate_down)
 // ---------------------------------------------------------------------------
 
+/// A single step in a computed migration plan (used by dry-run and down paths).
 #[derive(Debug, Clone, Serialize)]
 pub struct MigrationPlan {
     pub version: u32,
@@ -51,6 +52,7 @@ pub struct MigrationPlan {
 // Migration status
 // ---------------------------------------------------------------------------
 
+/// Current migration state of the database, including pending and revertible steps.
 #[derive(Debug, Serialize)]
 pub struct MigrationStatus {
     pub current_version: u32,
@@ -60,6 +62,7 @@ pub struct MigrationStatus {
     pub revertible_down: Vec<MigrationInfo>,
 }
 
+/// Summary of a single migration entry for status reporting.
 #[derive(Debug, Clone, Serialize)]
 pub struct MigrationInfo {
     pub version: u32,
@@ -496,67 +499,142 @@ pub static MIGRATIONS: &[Migration] = &[
         down: Some(down_migration_handoffs_global),
         transactional: true,
     },
+    // Adds soft-delete support to users and a one-time invite token table
+    // for controlled FIDO2 enrollment of new coworkers.
+    Migration {
+        version: 56,
+        description: "user_active_and_enrollment_invites",
+        up: run_migration_user_active_and_invites,
+        down: Some(down_migration_user_active_and_invites),
+        transactional: true,
+    },
+    Migration {
+        version: 57,
+        description: "skill_dispatch_configs",
+        up: run_migration_skill_dispatch_configs,
+        down: Some(down_migration_skill_dispatch_configs),
+        transactional: true,
+    },
 ];
 
 // ---------------------------------------------------------------------------
 // Legacy version constants (kept for compatibility with existing call sites)
 // ---------------------------------------------------------------------------
 
+/// Version number for the initial schema creation migration.
 const MIGRATION_CREATE_SCHEMA: i64 = 1;
+/// Version number for the add-missing-indexes migration.
 const MIGRATION_ADD_MISSING_INDEXES: i64 = 2;
+/// Version number for the pagerank tables migration.
 const MIGRATION_PAGERANK_TABLES: i64 = 3;
+/// Version number for the thymus tenant-scope migration.
 const MIGRATION_THYMUS_TENANT_SCOPE: i64 = 4;
+/// Version number for the app_state table migration.
 const MIGRATION_APP_STATE_TABLE: i64 = 5;
+/// Version number for the thymus user_id backfill migration.
 const MIGRATION_BACKFILL_THYMUS_USER_ID: i64 = 6;
+/// Version number for the vector_sync_pending table migration.
 const MIGRATION_VECTOR_SYNC_PENDING: i64 = 7;
+/// Version number for the community_id column migration.
 const MIGRATION_ADD_COMMUNITY_ID: i64 = 8;
+/// Version number for the drop-is_inference migration.
 const MIGRATION_DROP_IS_INFERENCE: i64 = 9;
+/// Version number for the syntheos services schema migration.
 const MIGRATION_SYNTHEOS_SERVICES: i64 = 10;
+/// Version number for the brain_patterns and brain_edges tables migration.
 const MIGRATION_BRAIN_PATTERNS: i64 = 11;
+/// Version number for the approvals table migration.
 const MIGRATION_APPROVALS: i64 = 12;
+/// Version number for the error_events table migration.
 const MIGRATION_ERROR_EVENTS: i64 = 13;
+/// Version number for the brain_meta table migration.
 const MIGRATION_BRAIN_META: i64 = 14;
+/// Version number for the brain_pca_models table migration.
 const MIGRATION_PCA_MODELS: i64 = 15;
+/// Version number for the brain_dream_runs table migration.
 const MIGRATION_BRAIN_DREAM_RUNS: i64 = 16;
+/// Version number for the cred tables migration.
 const MIGRATION_CRED_TABLES: i64 = 17;
+/// Version number for the api_key_hash unique index migration.
 const MIGRATION_API_KEY_HASH_UNIQUE: i64 = 18;
+/// Version number for the api_key hash_version column migration.
 const MIGRATION_API_KEY_HASH_VERSION: i64 = 19;
+/// Version number for the link covering indexes migration.
 const MIGRATION_LINK_COVERING_INDEXES: i64 = 20;
+/// Version number for the upload sessions tables migration.
 const MIGRATION_UPLOAD_SESSIONS: i64 = 21;
+/// Version number for the service_dead_letters table migration.
 const MIGRATION_SERVICE_DEAD_LETTERS: i64 = 22;
+/// Version number for the memories list covering index migration.
 const MIGRATION_MEMORIES_LIST_COVERING_INDEX: i64 = 23;
+/// Version number for the commerce tables migration.
 const MIGRATION_COMMERCE_TABLES: i64 = 24;
+/// Version number for dropping user_id from memory core tables.
 const MIGRATION_DROP_USER_ID_MEMORY_CORE: i64 = 25;
+/// Version number for dropping user_id from scratchpad tables.
 const MIGRATION_DROP_USER_ID_SCRATCHPAD: i64 = 26;
+/// Version number for dropping user_id from session tables.
 const MIGRATION_DROP_USER_ID_SESSIONS: i64 = 27;
+/// Version number for dropping user_id from chiasm tables.
 const MIGRATION_DROP_USER_ID_CHIASM: i64 = 28;
+/// Version number for dropping user_id from approvals tables.
 const MIGRATION_DROP_USER_ID_APPROVALS: i64 = 29;
+/// Version number for dropping user_id from broca tables.
 const MIGRATION_DROP_USER_ID_BROCA: i64 = 30;
+/// Version number for dropping user_id from projects tables.
 const MIGRATION_DROP_USER_ID_PROJECTS: i64 = 31;
+/// Version number for dropping user_id from activity tables.
 const MIGRATION_DROP_USER_ID_ACTIVITY: i64 = 32;
+/// Version number for dropping user_id from webhooks tables.
 const MIGRATION_DROP_USER_ID_WEBHOOKS: i64 = 33;
+/// Version number for dropping user_id from axon tables.
 const MIGRATION_DROP_USER_ID_AXON: i64 = 34;
+/// Version number for dropping user_id from growth tables.
 const MIGRATION_DROP_USER_ID_GROWTH: i64 = 35;
+/// Version number for dropping user_id from ingestion_hashes tables.
 const MIGRATION_DROP_USER_ID_INGESTION_HASHES: i64 = 36;
+/// Version number for dropping user_id from loom tables.
 const MIGRATION_DROP_USER_ID_LOOM: i64 = 37;
+/// Version number for dropping user_id from graph tables.
 const MIGRATION_DROP_USER_ID_GRAPH: i64 = 38;
+/// Version number for dropping user_id from thymus tables.
 const MIGRATION_DROP_USER_ID_THYMUS: i64 = 39;
+/// Version number for dropping user_id from portability tables.
 const MIGRATION_DROP_USER_ID_PORTABILITY: i64 = 40;
+/// Version number for dropping user_id from intelligence tables.
 const MIGRATION_DROP_USER_ID_INTELLIGENCE: i64 = 41;
+/// Version number for dropping user_id from skills tables.
 const MIGRATION_DROP_USER_ID_SKILLS: i64 = 42;
+/// Version number for dropping user_id from episodes tables.
 const MIGRATION_DROP_USER_ID_EPISODES: i64 = 43;
+/// Version number for re-adding user_id to monolith projects tables.
 const MIGRATION_READD_USER_ID_PROJECTS: i64 = 44;
+/// Version number for re-adding user_id to monolith broca tables.
 const MIGRATION_READD_USER_ID_BROCA: i64 = 45;
+/// Version number for the identity_keys and identities tables migration.
 const MIGRATION_IDENTITY_TABLES: i64 = 46;
+/// Version number for the audit_log identity columns migration.
 const MIGRATION_AUDIT_IDENTITY_COLUMNS: i64 = 47;
+/// Version number for dropping the api_keys agent FK migration.
 const MIGRATION_DROP_API_KEYS_AGENT_FK: i64 = 48;
+/// Version number for the supervisor_injections table migration.
 const MIGRATION_SUPERVISOR_INJECTIONS: i64 = 49;
+/// Version number for the gate_requests session_id column migration.
 const MIGRATION_GATE_REQUESTS_SESSION_ID: i64 = 50;
+/// Version number for the memory_chunks table migration.
 const MIGRATION_MEMORY_CHUNKS: i64 = 51;
+/// Version number for the activity_log table migration.
 const MIGRATION_ACTIVITY_LOG_TABLE: i64 = 52;
+/// Version number for the identity_keys scopes column migration.
 const MIGRATION_IDENTITY_KEYS_SCOPES: i64 = 53;
+/// Version number for the tool_manifests table migration.
 const MIGRATION_TOOL_MANIFESTS: i64 = 54;
+/// Version number for the global handoffs table migration.
 const MIGRATION_HANDOFFS_GLOBAL: i64 = 55;
+/// Version number for the user is_active flag and enrollment_invites migration.
+const MIGRATION_USER_ACTIVE_AND_INVITES: i64 = 56;
+/// Version number for the skill_dispatch_configs table migration.
+const MIGRATION_SKILL_DISPATCH_CONFIGS: i64 = 57;
 
 // ---------------------------------------------------------------------------
 // Up path (unchanged behavior)
@@ -993,9 +1071,30 @@ pub fn run_migrations(conn: &rusqlite::Connection) -> Result<()> {
         record_migration(conn, MIGRATION_HANDOFFS_GLOBAL, "handoffs_global")?;
     }
 
+    if current_version < MIGRATION_USER_ACTIVE_AND_INVITES {
+        info!("Running migration 56: user_active_and_enrollment_invites");
+        run_migration_user_active_and_invites(conn)?;
+        record_migration(
+            conn,
+            MIGRATION_USER_ACTIVE_AND_INVITES,
+            "user_active_and_enrollment_invites",
+        )?;
+    }
+
+    if current_version < MIGRATION_SKILL_DISPATCH_CONFIGS {
+        info!("Running migration 57: skill_dispatch_configs");
+        run_migration_skill_dispatch_configs(conn)?;
+        record_migration(
+            conn,
+            MIGRATION_SKILL_DISPATCH_CONFIGS,
+            "skill_dispatch_configs",
+        )?;
+    }
+
     Ok(())
 }
 
+/// Inserts a row into schema_version to record that a migration has been applied.
 fn record_migration(conn: &rusqlite::Connection, version: i64, name: &str) -> Result<()> {
     conn.execute(
         "INSERT INTO schema_version (version, name) VALUES (?1, ?2)",
@@ -1005,6 +1104,7 @@ fn record_migration(conn: &rusqlite::Connection, version: i64, name: &str) -> Re
     Ok(())
 }
 
+/// Deletes the schema_version row for `version`, used by the down-migration path.
 fn remove_migration_record(conn: &rusqlite::Connection, version: u32) -> Result<()> {
     conn.execute(
         "DELETE FROM schema_version WHERE version = ?1",
@@ -1165,6 +1265,7 @@ pub async fn migration_status(db: &super::Database) -> Result<MigrationStatus> {
 // Up migration implementations
 // ---------------------------------------------------------------------------
 
+/// Migration 2: adds missing secondary indexes to all core tables.
 fn run_migration_add_missing_indexes(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "
@@ -1198,6 +1299,7 @@ fn run_migration_add_missing_indexes(conn: &rusqlite::Connection) -> Result<()> 
     Ok(())
 }
 
+/// Migration 3: creates the memory_pagerank and pagerank_dirty tables.
 fn run_migration_pagerank_tables(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "
@@ -1222,6 +1324,7 @@ fn run_migration_pagerank_tables(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migration 4: adds user_id to thymus tables for per-tenant scoping.
 fn run_migration_thymus_tenant_scope(conn: &rusqlite::Connection) -> Result<()> {
     add_column_if_not_exists(
         conn,
@@ -1243,6 +1346,7 @@ fn run_migration_thymus_tenant_scope(conn: &rusqlite::Connection) -> Result<()> 
     Ok(())
 }
 
+/// Migration 5: creates the app_state key-value table for persistent configuration.
 fn run_migration_app_state_table(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS app_state (
@@ -1255,6 +1359,7 @@ fn run_migration_app_state_table(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migration 6: backfills user_id = 1 for any zero-valued rows in thymus tables.
 fn run_migration_backfill_thymus_user_id(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute(
         "UPDATE session_quality SET user_id = 1 WHERE user_id = 0",
@@ -1269,6 +1374,7 @@ fn run_migration_backfill_thymus_user_id(conn: &rusqlite::Connection) -> Result<
     Ok(())
 }
 
+/// Migration 7: creates the vector_sync_pending queue table for async embedding sync.
 fn run_migration_vector_sync_pending(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "
@@ -1292,6 +1398,7 @@ fn run_migration_vector_sync_pending(conn: &rusqlite::Connection) -> Result<()> 
     Ok(())
 }
 
+/// Migration 8: adds community_id column and index to the memories table.
 fn run_migration_add_community_id(conn: &rusqlite::Connection) -> Result<()> {
     add_column_if_not_exists(conn, "memories", "community_id", "INTEGER")?;
     conn.execute_batch(
@@ -1393,6 +1500,7 @@ fn run_migration_approvals(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Adds `column` to `table` if it does not already exist; idempotent.
 fn add_column_if_not_exists(
     conn: &rusqlite::Connection,
     table: &str,
@@ -1447,6 +1555,7 @@ fn run_migration_brain_meta(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migration 15: creates the brain_pca_models table for dimensionality reduction state.
 fn run_migration_pca_models(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS brain_pca_models (
@@ -1703,6 +1812,7 @@ fn run_migration_service_dead_letters(conn: &rusqlite::Connection) -> Result<()>
     Ok(())
 }
 
+/// Reverse migration 22: drops the service_dead_letters table.
 fn down_migration_service_dead_letters(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch("DROP TABLE IF EXISTS service_dead_letters;")
         .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
@@ -1733,6 +1843,7 @@ fn run_migration_memories_list_covering_index(conn: &rusqlite::Connection) -> Re
     Ok(())
 }
 
+/// Reverse migration 23: drops the memories list covering index.
 fn down_migration_memories_list_covering_index(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch("DROP INDEX IF EXISTS idx_memories_list_user_id_desc;")
         .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
@@ -1744,6 +1855,7 @@ fn down_migration_memories_list_covering_index(conn: &rusqlite::Connection) -> R
 // Migration 24: commerce tables
 // ---------------------------------------------------------------------------
 
+/// Migration 24: creates the commerce tables for payment quotes, settlements, and pricing.
 fn run_migration_commerce_tables(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS service_pricing (
@@ -1832,6 +1944,7 @@ fn run_migration_commerce_tables(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Reverse migration 24: drops all commerce tables in dependency order.
 fn down_migration_commerce_tables(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "DROP TABLE IF EXISTS daily_spend;
@@ -2406,6 +2519,7 @@ fn run_migration_drop_user_id_ingestion_hashes(conn: &rusqlite::Connection) -> R
     Ok(())
 }
 
+/// Migration 37: drops user_id from loom_workflows (Shape B rebuild) and loom_runs.
 fn run_migration_drop_user_id_loom(conn: &rusqlite::Connection) -> Result<()> {
     // Idempotent guard: check loom_workflows first (Shape B rebuild).
     let wf_has_user_id: i64 = conn
@@ -2465,6 +2579,7 @@ fn run_migration_drop_user_id_loom(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migration 38: drops user_id from graph tables (entities, entity_cooccurrences, memory_pagerank, brain_edges).
 fn run_migration_drop_user_id_graph(conn: &rusqlite::Connection) -> Result<()> {
     // Idempotent guard: check entities (Shape B), memory_pagerank (Shape B),
     // pagerank_dirty (CHECK rebuild), entity_cooccurrences (Shape A),
@@ -2622,6 +2737,7 @@ fn run_migration_drop_user_id_graph(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migration 39: drops user_id from all thymus cluster tables (rubrics, evaluations, quality_metrics, etc.).
 fn run_migration_drop_user_id_thymus(conn: &rusqlite::Connection) -> Result<()> {
     // Idempotent guard: check rubrics (Shape A with index swap) as sentinel.
     // If rubrics.user_id is already gone, all 5 thymus tables have been
@@ -2711,6 +2827,7 @@ fn run_migration_drop_user_id_thymus(conn: &rusqlite::Connection) -> Result<()> 
     Ok(())
 }
 
+/// Migration 40: drops user_id from user_preferences (Shape B rebuild) and conversations.
 fn run_migration_drop_user_id_portability(conn: &rusqlite::Connection) -> Result<()> {
     // Idempotent guard: check both tables. user_preferences is Shape B (table
     // rebuild required due to in-table UNIQUE constraint); conversations is
@@ -2785,6 +2902,7 @@ fn run_migration_drop_user_id_portability(conn: &rusqlite::Connection) -> Result
     Ok(())
 }
 
+/// Migration 41: drops user_id from intelligence tables (current_state, consolidations).
 fn run_migration_drop_user_id_intelligence(conn: &rusqlite::Connection) -> Result<()> {
     // Idempotent guard: check current_state (Shape B) and consolidations (Shape A).
     // If both already lack user_id, the migration already ran.
@@ -2881,6 +2999,7 @@ fn run_migration_drop_user_id_intelligence(conn: &rusqlite::Connection) -> Resul
     Ok(())
 }
 
+/// Migration 42: drops user_id from skill_records via Shape B rebuild including FTS shadow table.
 fn run_migration_drop_user_id_skills(conn: &rusqlite::Connection) -> Result<()> {
     // Idempotent guard: check skill_records. If user_id is already absent,
     // the migration already ran.
@@ -3034,6 +3153,7 @@ fn run_migration_drop_user_id_skills(conn: &rusqlite::Connection) -> Result<()> 
 /// pre-flight report. Every query is tolerant of missing tables so operators
 /// running this against a partially-migrated DB still get a useful summary.
 pub fn validate_post_import(conn: &rusqlite::Connection) -> Result<PostImportValidation> {
+    /// Returns the integer result of a COUNT query, or 0 on error.
     fn count(conn: &rusqlite::Connection, sql: &str) -> i64 {
         conn.query_row(sql, [], |row| row.get(0)).unwrap_or(0)
     }
@@ -3086,6 +3206,7 @@ pub fn validate_post_import(conn: &rusqlite::Connection) -> Result<PostImportVal
     })
 }
 
+/// Migration 43: drops user_id from the episodes table (Shape A, simple DROP COLUMN).
 fn run_migration_drop_user_id_episodes(conn: &rusqlite::Connection) -> Result<()> {
     // Idempotent guard: if user_id is already absent from episodes, skip.
     let has_user_id: i64 = conn
@@ -3219,6 +3340,7 @@ fn run_migration_readd_user_id_broca(conn: &rusqlite::Connection) -> Result<()> 
     Ok(())
 }
 
+/// Migration 48: rebuilds api_keys without the cross-database agent FK.
 fn run_migration_drop_api_keys_agent_fk(conn: &rusqlite::Connection) -> Result<()> {
     // In the sharded architecture agents live in per-tenant databases while
     // api_keys stays in the system DB. The FK `agent_id REFERENCES agents(id)`
@@ -3327,6 +3449,7 @@ fn run_migration_drop_api_keys_agent_fk(conn: &rusqlite::Connection) -> Result<(
 // Migration 46: identity_keys + identities tables
 // ---------------------------------------------------------------------------
 
+/// Migration 46: creates the identity_keys and identities tables for PIV-Everywhere auth.
 fn run_migration_identity_tables(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS identity_keys (
@@ -3375,6 +3498,7 @@ fn run_migration_identity_tables(conn: &rusqlite::Connection) -> Result<()> {
 // Migration 47: audit_log identity columns
 // ---------------------------------------------------------------------------
 
+/// Migration 47: adds identity_id and identity_tier columns to the audit_log table.
 fn run_migration_audit_identity_columns(conn: &rusqlite::Connection) -> Result<()> {
     let has_identity_id: i64 = conn
         .query_row(
@@ -3430,6 +3554,7 @@ fn run_migration_supervisor_injections(conn: &rusqlite::Connection) -> Result<()
     Ok(())
 }
 
+/// Reverse migration 49: drops the supervisor_injections table and its indexes.
 fn down_migration_supervisor_injections(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "DROP INDEX IF EXISTS idx_supervisor_injections_created;
@@ -3440,6 +3565,7 @@ fn down_migration_supervisor_injections(conn: &rusqlite::Connection) -> Result<(
     Ok(())
 }
 
+/// Migration 50: adds session_id column to gate_requests and creates a partial index.
 fn run_migration_gate_requests_session_id(conn: &rusqlite::Connection) -> Result<()> {
     let has_col: bool = conn
         .prepare("PRAGMA table_info(gate_requests)")?
@@ -3463,12 +3589,14 @@ fn run_migration_gate_requests_session_id(conn: &rusqlite::Connection) -> Result
     Ok(())
 }
 
+/// Reverse migration 50: drops the gate_requests session_id index and column.
 fn down_migration_gate_requests_session_id(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch("DROP INDEX IF EXISTS idx_gate_requests_session_open;")
         .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
     Ok(())
 }
 
+/// Migration 51: creates the memory_chunks table for chunked memory storage.
 fn run_migration_memory_chunks(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS memory_chunks (
@@ -3488,6 +3616,7 @@ fn run_migration_memory_chunks(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Reverse migration 51: drops the memory_chunks table and its index.
 fn down_migration_memory_chunks(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "DROP INDEX IF EXISTS idx_chunks_memory;
@@ -3497,6 +3626,7 @@ fn down_migration_memory_chunks(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migration 52: creates the activity_log table for agent session activity tracking.
 fn run_migration_activity_log_table(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS activity_log (
@@ -3523,12 +3653,14 @@ fn run_migration_activity_log_table(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Reverse migration 52: drops the activity_log table.
 fn down_migration_activity_log_table(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch("DROP TABLE IF EXISTS activity_log;")
         .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
     Ok(())
 }
 
+/// Migration 53: adds the scopes JSON column to identity_keys.
 fn run_migration_identity_keys_scopes(conn: &rusqlite::Connection) -> Result<()> {
     let has_column: bool = conn
         .query_row(
@@ -3548,6 +3680,7 @@ fn run_migration_identity_keys_scopes(conn: &rusqlite::Connection) -> Result<()>
     Ok(())
 }
 
+/// Reverse migration 53: drops the scopes column from identity_keys.
 fn down_migration_identity_keys_scopes(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch("ALTER TABLE identity_keys DROP COLUMN scopes;")
         .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
@@ -3558,6 +3691,7 @@ fn down_migration_identity_keys_scopes(conn: &rusqlite::Connection) -> Result<()
 // v54: tool_manifests
 // ---------------------------------------------------------------------------
 
+/// Migration 54: creates the tool_manifests table for signed agent tool declarations.
 fn run_migration_tool_manifests(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS tool_manifests (
@@ -3574,6 +3708,7 @@ fn run_migration_tool_manifests(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Reverse migration 54: drops the tool_manifests table and its index.
 fn down_migration_tool_manifests(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "DROP INDEX IF EXISTS idx_tool_manifests_agent;
@@ -3583,6 +3718,7 @@ fn down_migration_tool_manifests(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Migration 55: creates the global handoffs table and FTS shadow for session handoff search.
 fn run_migration_handoffs_global(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS handoffs (
@@ -3628,6 +3764,7 @@ fn run_migration_handoffs_global(conn: &rusqlite::Connection) -> Result<()> {
     Ok(())
 }
 
+/// Reverse migration 55: drops the handoffs FTS shadow, triggers, and main table.
 fn down_migration_handoffs_global(conn: &rusqlite::Connection) -> Result<()> {
     conn.execute_batch(
         "DROP TRIGGER IF EXISTS handoffs_fts_au;
@@ -3641,13 +3778,119 @@ fn down_migration_handoffs_global(conn: &rusqlite::Connection) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// Migration 56: is_active on users + enrollment_invites table
+// ---------------------------------------------------------------------------
+
+/// Adds a soft-delete flag to the users table so deactivated accounts can be
+/// excluded from queries without losing audit history. Also creates the
+/// enrollment_invites table that holds hashed one-time tokens for FIDO2 key
+/// registration -- the raw token is shown to the admin exactly once and never
+/// stored.
+fn run_migration_user_active_and_invites(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(
+        // Default 1 so every existing user stays active after migration.
+        "ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 1;
+
+         CREATE TABLE IF NOT EXISTS enrollment_invites (
+             id         INTEGER PRIMARY KEY AUTOINCREMENT,
+             user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+             token_hash TEXT    NOT NULL UNIQUE,
+             method     TEXT    NOT NULL DEFAULT 'fido2',
+             created_at TEXT    NOT NULL DEFAULT (datetime('now', 'utc')),
+             expires_at TEXT    NOT NULL,
+             consumed_at TEXT
+         );
+         CREATE INDEX IF NOT EXISTS idx_enrollment_invites_token
+             ON enrollment_invites(token_hash);
+         CREATE INDEX IF NOT EXISTS idx_enrollment_invites_user
+             ON enrollment_invites(user_id, created_at DESC);",
+    )
+    .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+    Ok(())
+}
+
+/// Reverse migration 56: drop the enrollment_invites table and remove the
+/// is_active column from users. Uses ALTER TABLE DROP COLUMN (SQLite 3.35.0+).
+fn down_migration_user_active_and_invites(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(
+        "DROP INDEX IF EXISTS idx_enrollment_invites_user;
+         DROP INDEX IF EXISTS idx_enrollment_invites_token;
+         DROP TABLE IF EXISTS enrollment_invites;
+         ALTER TABLE users DROP COLUMN is_active;",
+    )
+    .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+    Ok(())
+}
+
+/// Migration 57: dispatch config table for the `forge` agent tool runtime.
+///
+/// Each row describes a callable skill endpoint -- parameter schema, HTTP
+/// target, and output formatting hints.  `forge exec <skill_name>` fetches the
+/// matching row and uses it to validate args, build the request, and format the
+/// response without any hardcoded knowledge of the skill.
+fn run_migration_skill_dispatch_configs(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS skill_dispatch_configs (
+             id            INTEGER PRIMARY KEY AUTOINCREMENT,
+             skill_name    TEXT    NOT NULL UNIQUE,
+             description   TEXT    NOT NULL DEFAULT '',
+             enabled       BOOLEAN NOT NULL DEFAULT 1,
+             target_type   TEXT    NOT NULL DEFAULT 'internal'
+                           CHECK(target_type IN ('internal', 'external')),
+             endpoint      TEXT    NOT NULL,
+             method        TEXT    NOT NULL DEFAULT 'POST',
+             params_schema TEXT    NOT NULL DEFAULT '{}',
+             output_hints  TEXT    NOT NULL DEFAULT '{}',
+             created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+             updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+         );
+
+         CREATE INDEX IF NOT EXISTS idx_sdc_skill_name
+             ON skill_dispatch_configs(skill_name);
+         CREATE INDEX IF NOT EXISTS idx_sdc_enabled
+             ON skill_dispatch_configs(enabled);",
+    )
+    .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+
+    // Seed: web_search -- first callable skill.
+    conn.execute(
+        "INSERT OR IGNORE INTO skill_dispatch_configs
+             (skill_name, description, enabled, target_type, endpoint, method,
+              params_schema, output_hints)
+         VALUES (?1, ?2, 1, 'internal', '/search/web', 'POST', ?3, ?4)",
+        rusqlite::params![
+            "web_search",
+            "Search the web via SearXNG. Returns ranked results with title, URL, and snippet.",
+            r#"{"query":{"type":"string","required":true,"description":"Search query (max 512 chars)"},"categories":{"type":"string","required":false,"description":"Search category","enum":["general","images","videos","news","map","music","it","science","files","social media"]},"language":{"type":"string","required":false,"description":"Language code (e.g. en, de, fr)"},"limit":{"type":"integer","required":false,"default":10,"description":"Max results (1-50)"},"pageno":{"type":"integer","required":false,"default":1,"description":"Page number (1-20)"},"safesearch":{"type":"integer","required":false,"description":"0=off, 1=moderate, 2=strict"}}"#,
+            r#"{"results_path":"/results","summary_fields":["title","url","snippet"],"count_path":"/count","suggestions_path":"/suggestions"}"#,
+        ],
+    )
+    .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+
+    Ok(())
+}
+
+/// Reverse migration 57: drop the skill_dispatch_configs table.
+fn down_migration_skill_dispatch_configs(conn: &rusqlite::Connection) -> Result<()> {
+    conn.execute_batch(
+        "DROP INDEX IF EXISTS idx_sdc_enabled;
+         DROP INDEX IF EXISTS idx_sdc_skill_name;
+         DROP TABLE IF EXISTS skill_dispatch_configs;",
+    )
+    .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
+/// Unit and integration tests for the migration chain.
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Opens an in-memory SQLite connection for testing.
     fn open_test_db() -> rusqlite::Connection {
         rusqlite::Connection::open_in_memory().expect("open in-memory test db")
     }
@@ -3786,6 +4029,7 @@ mod tests {
         }
     }
 
+    /// Verifies that running migrations twice on the same database is safe.
     #[tokio::test]
     async fn test_migrations_idempotent() -> Result<()> {
         let conn = open_test_db();
@@ -3805,6 +4049,7 @@ mod tests {
         Ok(())
     }
 
+    /// Verifies the supervisor_injections table and its columns are created by migration 49.
     #[test]
     fn test_supervisor_injections_migration() {
         let conn = open_test_db();
@@ -3864,6 +4109,7 @@ mod tests {
         assert_eq!(table_count, 0);
     }
 
+    /// Verifies that pending supervisor_injections rows are atomically claimed via claimed_at.
     #[test]
     fn test_supervisor_injections_pending_atomic_claim() {
         let conn = open_test_db();

@@ -16,11 +16,14 @@
 //! Skills read memories and write derived rows; they must not mutate raw
 //! `memories` outside their own tables.
 
+pub mod aliases;
 pub mod analyzer;
+pub mod bundles;
 pub mod cloud;
 pub mod conversation_formatter;
 pub mod dashboard;
 pub mod evolver;
+pub mod materializations;
 pub mod patch;
 pub mod registry;
 pub mod search;
@@ -31,19 +34,22 @@ use crate::{EngError, Result};
 use rusqlite::params;
 
 pub use types::{
-    CreateSkillRequest, EvolutionFeedRow, ExecutionRecord, Skill, SkillJudgment, ToolQuality,
-    UpdateSkillRequest,
+    CreateSkillRequest, EvolutionFeedRow, ExecutionRecord, Skill, SkillJudgment, SkillKind,
+    ToolQuality, UpdateSkillRequest,
 };
 
 // -- Constants --
 
+/// Canonical SELECT column list for `skill_records`; order must match `row_to_skill` indices.
 pub(crate) const SKILL_COLUMNS: &str = "id, name, agent, description, code, language, version, \
     parent_skill_id, root_skill_id, trust_score, success_count, failure_count, \
     execution_count, avg_duration_ms, is_active, is_deprecated, metadata, \
-    created_at, updated_at";
+    created_at, updated_at, \
+    kind, source_plugin, source_path, content_hash";
 
 // -- Helpers --
 
+/// Maps a `SELECT SKILL_COLUMNS` row into a `Skill` struct; trailing v50 columns may be NULL.
 pub(crate) fn row_to_skill(row: &rusqlite::Row<'_>) -> rusqlite::Result<Skill> {
     Ok(Skill {
         id: row.get(0)?,
@@ -66,11 +72,18 @@ pub(crate) fn row_to_skill(row: &rusqlite::Row<'_>) -> rusqlite::Result<Skill> {
         user_id: 1,
         created_at: row.get(17)?,
         updated_at: row.get(18)?,
+        kind: row
+            .get::<_, Option<String>>(19)?
+            .unwrap_or_else(|| "skill".to_string()),
+        source_plugin: row.get(20)?,
+        source_path: row.get(21)?,
+        content_hash: row.get(22)?,
     })
 }
 
 // -- CRUD --
 
+/// Creates a new skill record and returns the persisted skill.
 #[tracing::instrument(skip(db, req), fields(name = %req.name, agent = %req.agent))]
 pub async fn create_skill(db: &Database, req: CreateSkillRequest) -> Result<Skill> {
     let user_id = req
@@ -117,13 +130,20 @@ pub async fn create_skill(db: &Database, req: CreateSkillRequest) -> Result<Skil
     let parent_skill_id = req.parent_skill_id;
     let tags = req.tags.clone();
     let tool_deps = req.tool_deps.clone();
+    let kind = req.kind.clone().unwrap_or_else(|| "skill".to_string());
+    kind.parse::<SkillKind>().map_err(|_| {
+        EngError::InvalidInput(format!("invalid skill kind: '{}'", kind))
+    })?;
+    let source_plugin = req.source_plugin.clone();
+    let source_path = req.source_path.clone();
+    let content_hash = req.content_hash.clone();
 
     let id = db
         .write(move |conn| {
             conn.execute(
                 "INSERT INTO skill_records (name, agent, description, code, language, version, \
-                 parent_skill_id, root_skill_id) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                 parent_skill_id, root_skill_id, kind, source_plugin, source_path, content_hash) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     name,
                     agent,
@@ -133,6 +153,10 @@ pub async fn create_skill(db: &Database, req: CreateSkillRequest) -> Result<Skil
                     version,
                     parent_skill_id,
                     root_skill_id,
+                    kind,
+                    source_plugin,
+                    source_path,
+                    content_hash,
                 ],
             )
             .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
@@ -176,6 +200,7 @@ pub async fn create_skill(db: &Database, req: CreateSkillRequest) -> Result<Skil
     get_skill(db, id, user_id).await
 }
 
+/// Fetches a single skill by id; returns `NotFound` if absent.
 #[tracing::instrument(skip(db))]
 pub async fn get_skill(db: &Database, id: i64, _user_id: i64) -> Result<Skill> {
     let sql = format!("SELECT {} FROM skill_records WHERE id = ?1", SKILL_COLUMNS);
@@ -197,6 +222,7 @@ pub async fn get_skill(db: &Database, id: i64, _user_id: i64) -> Result<Skill> {
 
 pub use crate::validation::MAX_SKILLS_LIMIT;
 
+/// Lists active skills, optionally filtered by agent, with pagination.
 #[tracing::instrument(skip(db))]
 pub async fn list_skills(
     db: &Database,
@@ -244,6 +270,7 @@ pub async fn list_skills(
     .await
 }
 
+/// Applies partial updates to an existing skill and returns the refreshed record.
 #[tracing::instrument(skip(db, req))]
 pub async fn update_skill(
     db: &Database,
@@ -254,11 +281,20 @@ pub async fn update_skill(
     // Verify ownership
     get_skill(db, id, user_id).await?;
 
+    if let Some(ref k) = req.kind {
+        k.parse::<SkillKind>().map_err(|_| {
+            EngError::InvalidInput(format!("invalid skill kind: '{}'", k))
+        })?;
+    }
+
     let code = req.code.clone();
     let desc = req.description.clone();
     let is_active = req.is_active;
     let is_deprecated = req.is_deprecated;
     let meta = req.metadata.clone();
+    let kind = req.kind.clone();
+    let source_path = req.source_path.clone();
+    let content_hash = req.content_hash.clone();
 
     db.write(move |conn| {
         if let Some(ref c) = code {
@@ -293,6 +329,27 @@ pub async fn update_skill(
             conn.execute(
                 "UPDATE skill_records SET metadata = ?1, updated_at = datetime('now') WHERE id = ?2",
                 params![m, id],
+            )
+            .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+        }
+        if let Some(ref k) = kind {
+            conn.execute(
+                "UPDATE skill_records SET kind = ?1, updated_at = datetime('now') WHERE id = ?2",
+                params![k, id],
+            )
+            .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+        }
+        if let Some(ref sp) = source_path {
+            conn.execute(
+                "UPDATE skill_records SET source_path = ?1, updated_at = datetime('now') WHERE id = ?2",
+                params![sp, id],
+            )
+            .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
+        }
+        if let Some(ref ch) = content_hash {
+            conn.execute(
+                "UPDATE skill_records SET content_hash = ?1, updated_at = datetime('now') WHERE id = ?2",
+                params![ch, id],
             )
             .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
         }
@@ -336,6 +393,7 @@ pub async fn recompute_skill(db: &Database, id: i64, user_id: i64) -> Result<Ski
     get_skill(db, id, user_id).await
 }
 
+/// Permanently deletes a skill record; returns `NotFound` if absent.
 #[tracing::instrument(skip(db))]
 pub async fn delete_skill(db: &Database, id: i64, user_id: i64) -> Result<()> {
     let affected = db
@@ -352,6 +410,7 @@ pub async fn delete_skill(db: &Database, id: i64, user_id: i64) -> Result<()> {
 
 // -- Execution recording --
 
+/// Records a single skill execution outcome and updates rolled-up counters.
 #[tracing::instrument(skip(db, error_message))]
 pub async fn record_execution(
     db: &Database,
@@ -459,6 +518,7 @@ pub async fn get_executions(
 
 // -- Judgments --
 
+/// Records a judgment score and updates the skill's trust_score average.
 #[tracing::instrument(skip(db, rationale), fields(judge_agent = %judge_agent))]
 pub async fn add_judgment(
     db: &Database,
@@ -507,6 +567,7 @@ pub async fn add_judgment(
     })
 }
 
+/// Returns all judgments for a skill ordered by most recent first.
 #[tracing::instrument(skip(db))]
 pub async fn get_judgments(
     db: &Database,
@@ -547,6 +608,7 @@ pub async fn get_judgments(
 
 // -- Tool quality --
 
+/// Appends a tool quality observation to `tool_quality_records`.
 #[tracing::instrument(skip(db), fields(tool_name = %tool_name, agent = %agent))]
 pub async fn record_tool_quality(
     db: &Database,
@@ -578,6 +640,7 @@ pub async fn record_tool_quality(
     .await
 }
 
+/// Returns aggregate quality stats for a tool as a JSON value.
 #[tracing::instrument(skip(db), fields(tool_name = %tool_name))]
 pub async fn get_tool_quality(db: &Database, tool_name: &str) -> Result<serde_json::Value> {
     let tool_name_owned = tool_name.to_string();
@@ -625,6 +688,7 @@ pub async fn get_tool_quality(db: &Database, tool_name: &str) -> Result<serde_js
 
 // -- Skill tags --
 
+/// Returns all tags associated with a skill.
 #[tracing::instrument(skip(db))]
 pub async fn get_skill_tags(db: &Database, skill_id: i64, user_id: i64) -> Result<Vec<String>> {
     get_skill(db, skill_id, user_id).await?;
@@ -648,6 +712,7 @@ pub async fn get_skill_tags(db: &Database, skill_id: i64, user_id: i64) -> Resul
 
 // -- Tool deps --
 
+/// Returns all tool dependency names declared by a skill.
 #[tracing::instrument(skip(db))]
 pub async fn get_tool_deps(db: &Database, skill_id: i64, user_id: i64) -> Result<Vec<String>> {
     get_skill(db, skill_id, user_id).await?;
@@ -743,6 +808,7 @@ pub async fn list_recent_evolutions(
 
 // -- Skill lineage --
 
+/// Returns parent skill ids from the lineage table for a given skill.
 #[tracing::instrument(skip(db))]
 pub async fn get_lineage(db: &Database, skill_id: i64, user_id: i64) -> Result<Vec<i64>> {
     get_skill(db, skill_id, user_id).await?;

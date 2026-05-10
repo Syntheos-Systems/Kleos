@@ -11,16 +11,20 @@ use crate::extractors::{Auth, ResolvedDb};
 use crate::state::AppState;
 use kleos_lib::auth::Scope;
 use kleos_lib::skills::{
-    self, analyzer, cloud, dashboard, evolver, search::search_skills, CreateSkillRequest,
-    UpdateSkillRequest,
+    self, aliases as skill_aliases, analyzer, bundles as skill_bundles, cloud, dashboard, evolver,
+    materializations as skill_materializations,
+    search::{find_skills, search_skills, FindOpts},
+    CreateSkillRequest, UpdateSkillRequest,
 };
 use kleos_lib::validation::MAX_PAGINATION_OFFSET;
 
 mod types;
 use types::{
-    CaptureBody, CloudSearchBody, CloudUploadBody, DeriveBody, EvolutionRecentParams,
-    ExecuteSkillsBody, GetExecutionsParams, JudgeBody, ListSkillsParams, RecordExecutionBody,
-    RecordToolQualityBody, SearchSkillsBody, StatsParams, SyncSkillsBody, UploadSkillBody,
+    AddAliasBody, AddBundleMemberBody, CaptureBody, CloudSearchBody, CloudUploadBody,
+    CreateBundleBody, DeriveBody, EvolutionRecentParams, ExecuteSkillsBody, FindSkillsBody,
+    GetExecutionsParams, JudgeBody, ListSkillsParams, RecordExecutionBody,
+    RecordMaterializationBody, RecordToolQualityBody, ResolveAliasBody, SearchSkillsBody,
+    StatsParams, SyncSkillsBody, UploadSkillBody,
 };
 
 /// Clamp a caller-supplied `limit` into [1, max] with a default when absent.
@@ -78,6 +82,7 @@ fn is_path_allowed(dir: &str, allowlist: &[std::path::PathBuf]) -> bool {
 // Router
 // ---------------------------------------------------------------------------
 
+/// Register all `/skills`, `/tools`, and `/bundles` routes onto a shared Axum router.
 pub fn router() -> Router<AppState> {
     Router::new()
         // CRUD
@@ -122,8 +127,44 @@ pub fn router() -> Router<AppState> {
         // Cloud
         .route("/skills/cloud/search", post(cloud_search_handler))
         .route("/skills/cloud/upload", post(cloud_upload_handler))
+        // Skills Cloud (v50+): hybrid find, aliases, bundles, materializations
+        .route("/skills/find", post(find_skills_handler))
+        .route("/skills/aliases/resolve", post(resolve_alias_handler))
+        .route(
+            "/skills/{id}/aliases",
+            get(list_aliases_handler).post(add_alias_handler),
+        )
+        .route(
+            "/skills/{id}/aliases/{alias}",
+            axum::routing::delete(remove_alias_handler),
+        )
+        .route(
+            "/skills/{id}/materialization",
+            get(get_materialization_handler).delete(forget_materialization_handler),
+        )
+        .route(
+            "/skills/{id}/materialize",
+            post(record_materialization_handler),
+        )
+        .route(
+            "/bundles",
+            get(list_bundles_handler).post(create_bundle_handler),
+        )
+        .route(
+            "/bundles/{id}",
+            get(get_bundle_handler).delete(delete_bundle_handler),
+        )
+        .route(
+            "/bundles/{id}/skills",
+            get(list_bundle_members_handler).post(add_bundle_member_handler),
+        )
+        .route(
+            "/bundles/{id}/skills/{skill_id}",
+            axum::routing::delete(remove_bundle_member_handler),
+        )
 }
 
+/// Builds the sub-router for LLM-backed evolution routes with a per-request timeout.
 fn llm_routes() -> Router<AppState> {
     let timeout_ms: u64 = std::env::var("OLLAMA_TIMEOUT_BG_MS")
         .ok()
@@ -144,6 +185,7 @@ fn llm_routes() -> Router<AppState> {
 // CRUD handlers
 // ---------------------------------------------------------------------------
 
+/// Create a new skill record owned by the authenticated user and return it with 201.
 #[tracing::instrument(skip_all)]
 async fn create_skill_handler(
     Auth(auth): Auth,
@@ -155,6 +197,7 @@ async fn create_skill_handler(
     Ok((StatusCode::CREATED, Json(json!(skill))))
 }
 
+/// List skills owned by the authenticated user with optional agent filter and pagination.
 #[tracing::instrument(skip_all)]
 async fn list_skills_handler(
     Auth(auth): Auth,
@@ -170,6 +213,7 @@ async fn list_skills_handler(
     ))
 }
 
+/// Full-text and semantic search over the skill registry for the authenticated user.
 #[tracing::instrument(skip_all)]
 async fn search_skills_handler(
     Auth(auth): Auth,
@@ -181,6 +225,7 @@ async fn search_skills_handler(
     Ok(Json(json!({ "results": results, "count": results.len() })))
 }
 
+/// Fetch a single skill by ID, scoped to the authenticated user.
 #[tracing::instrument(skip_all)]
 async fn get_skill_handler(
     Auth(auth): Auth,
@@ -191,6 +236,7 @@ async fn get_skill_handler(
     Ok(Json(json!(skill)))
 }
 
+/// Permanently delete a skill owned by the authenticated user.
 #[tracing::instrument(skip_all)]
 async fn delete_skill_handler(
     Auth(auth): Auth,
@@ -201,6 +247,7 @@ async fn delete_skill_handler(
     Ok(Json(json!({ "deleted": true, "id": id })))
 }
 
+/// Apply a partial update to an existing skill owned by the authenticated user.
 #[tracing::instrument(skip_all)]
 async fn update_skill_handler(
     Auth(auth): Auth,
@@ -212,6 +259,7 @@ async fn update_skill_handler(
     Ok(Json(json!(skill)))
 }
 
+/// Recompute derived fields (embeddings, trust scores) for a skill by ID.
 #[tracing::instrument(skip_all)]
 async fn recompute_skill_handler(
     Auth(auth): Auth,
@@ -252,6 +300,7 @@ async fn record_execution_handler(
     ))
 }
 
+/// List recent execution records for a skill, scoped to the authenticated user.
 #[tracing::instrument(skip_all)]
 async fn get_executions_handler(
     Auth(auth): Auth,
@@ -289,6 +338,7 @@ async fn judge_handler(
     Ok((StatusCode::CREATED, Json(json!(judgment))))
 }
 
+/// List all judge scores and rationales recorded for a skill.
 #[tracing::instrument(skip_all)]
 async fn get_judgments_handler(
     Auth(auth): Auth,
@@ -315,6 +365,7 @@ async fn get_tags_handler(
     Ok(Json(json!({ "tags": tags })))
 }
 
+/// Return the tool dependency list declared for a skill.
 #[tracing::instrument(skip_all)]
 async fn get_deps_handler(
     Auth(auth): Auth,
@@ -325,6 +376,7 @@ async fn get_deps_handler(
     Ok(Json(json!({ "deps": deps })))
 }
 
+/// Return the parent/child lineage chain for a skill.
 #[tracing::instrument(skip_all)]
 async fn get_lineage_handler(
     Auth(auth): Auth,
@@ -386,6 +438,7 @@ async fn health_handler(
     Ok(Json(health))
 }
 
+/// Return aggregate health and usage overview for the authenticated user's skills.
 #[tracing::instrument(skip_all)]
 async fn overview_handler(
     Auth(auth): Auth,
@@ -395,6 +448,7 @@ async fn overview_handler(
     Ok(Json(json!(overview)))
 }
 
+/// Return per-skill execution statistics, sortable by the provided field.
 #[tracing::instrument(skip_all)]
 async fn stats_handler(
     Auth(auth): Auth,
@@ -407,6 +461,7 @@ async fn stats_handler(
     Ok(Json(json!({ "stats": stats, "count": stats.len() })))
 }
 
+/// Return full dashboard detail for a single skill including stats and recent executions.
 #[tracing::instrument(skip_all)]
 async fn detail_handler(
     Auth(auth): Auth,
@@ -434,6 +489,7 @@ async fn evolve_handler(
     Ok(Json(json!(result)))
 }
 
+/// Run LLM-driven repair on a broken skill identified by ID.
 #[tracing::instrument(skip_all)]
 async fn fix_handler(
     State(state): State<AppState>,
@@ -446,6 +502,7 @@ async fn fix_handler(
     Ok(Json(json!(result)))
 }
 
+/// Derive a new skill from one or more parent skills using LLM-guided synthesis.
 #[tracing::instrument(skip_all)]
 async fn derive_handler(
     State(state): State<AppState>,
@@ -467,6 +524,7 @@ async fn derive_handler(
     Ok(Json(json!(result)))
 }
 
+/// Capture a new skill from a natural-language description using the LLM.
 #[tracing::instrument(skip_all)]
 async fn capture_handler(
     State(state): State<AppState>,
@@ -480,6 +538,7 @@ async fn capture_handler(
     Ok(Json(json!(result)))
 }
 
+/// List skills that were recently evolved within the requested time window.
 #[tracing::instrument(skip_all)]
 async fn evolution_recent_handler(
     Auth(auth): Auth,
@@ -519,6 +578,7 @@ async fn cloud_search_handler(
     Ok(Json(json!({ "results": results, "count": results.len() })))
 }
 
+/// Publish a skill to the Skills Cloud registry by name, description, and content.
 #[tracing::instrument(skip_all)]
 async fn cloud_upload_handler(
     Auth(_auth): Auth,
@@ -615,6 +675,12 @@ async fn sync_skills_handler(
                             user_id: Some(auth.user_id),
                             tags: Some(vec!["imported".to_string()]),
                             tool_deps: None,
+                            // Skills Cloud (v50+): legacy /skills/sync path
+                            // doesn't carry plugin provenance; leave defaults.
+                            kind: None,
+                            source_plugin: None,
+                            source_path: None,
+                            content_hash: None,
                         };
 
                         if skills::create_skill(&db, req).await.is_ok() {
@@ -737,5 +803,227 @@ async fn upload_skill_handler(
         "uploaded": true,
         "skill_id": skill.id,
         "cloud_id": result,
+    })))
+}
+
+// ---------------------------------------------------------------------------
+// Skills Cloud (v50+) handlers
+// ---------------------------------------------------------------------------
+
+// POST /skills/find -- hybrid search returning ranked candidates with
+// per-signal score breakdown. Replaces the role of /skills/search for the
+// dispatch UX while leaving the legacy FTS-only route in place.
+#[tracing::instrument(skip_all)]
+async fn find_skills_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Json(body): Json<FindSkillsBody>,
+) -> Result<Json<Value>, AppError> {
+    let opts = FindOpts {
+        kind: body.kind,
+        plugin: body.plugin,
+        tag: body.tag,
+        limit: body.limit,
+        include_deprecated: body.include_deprecated,
+    };
+    let results = find_skills(&db, &body.query, opts).await?;
+    Ok(Json(json!({ "results": results, "count": results.len() })))
+}
+
+// POST /skills/aliases/resolve -- resolve a fuzzy alias string into ranked
+// candidates without running the full hybrid pipeline. Cheaper for dispatch.
+#[tracing::instrument(skip_all)]
+async fn resolve_alias_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Json(body): Json<ResolveAliasBody>,
+) -> Result<Json<Value>, AppError> {
+    let limit = body.limit.unwrap_or(10).clamp(1, 100);
+    let matches = skill_aliases::resolve_alias(&db, &body.query, limit).await?;
+    Ok(Json(json!({ "matches": matches, "count": matches.len() })))
+}
+
+// GET /skills/{id}/aliases -- list every alias attached to a skill.
+#[tracing::instrument(skip_all)]
+async fn list_aliases_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, AppError> {
+    let aliases = skill_aliases::list_for_skill(&db, id).await?;
+    Ok(Json(json!({ "aliases": aliases, "count": aliases.len() })))
+}
+
+// POST /skills/{id}/aliases -- add a user-driven alias. Confidence defaults
+// to 1.0; auto-aliases (importer) come in via the lib API directly.
+#[tracing::instrument(skip_all)]
+async fn add_alias_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Path(id): Path<i64>,
+    Json(body): Json<AddAliasBody>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    let confidence = body.confidence.unwrap_or(1.0).clamp(0.0, 1.0);
+    // The importer marks aliases as 'auto' so the rebuild path can wipe
+    // them without losing user-curated nicknames.
+    let source = body.source.as_deref().unwrap_or("user");
+    let source = match source {
+        "auto" | "user" => source,
+        _ => "user",
+    };
+    let alias_id = skill_aliases::add_alias(&db, id, &body.alias, confidence, source).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "id": alias_id, "skill_id": id, "alias": body.alias })),
+    ))
+}
+
+// DELETE /skills/{id}/aliases/{alias} -- remove a single alias.
+#[tracing::instrument(skip_all)]
+async fn remove_alias_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Path((id, alias)): Path<(i64, String)>,
+) -> Result<Json<Value>, AppError> {
+    let n = skill_aliases::remove_alias(&db, id, &alias).await?;
+    Ok(Json(
+        json!({ "deleted": n, "skill_id": id, "alias": alias }),
+    ))
+}
+
+// GET /skills/{id}/materialization -- check whether (and where) an agent
+// has been written to disk.
+#[tracing::instrument(skip_all)]
+async fn get_materialization_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, AppError> {
+    let row = skill_materializations::get(&db, id).await?;
+    Ok(Json(json!({ "materialization": row })))
+}
+
+// POST /skills/{id}/materialize -- the CLI calls this AFTER writing the
+// agent .md so the DB row tracks where on disk it landed.
+#[tracing::instrument(skip_all)]
+async fn record_materialization_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Path(id): Path<i64>,
+    Json(body): Json<RecordMaterializationBody>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    skill_materializations::record(&db, id, &body.target_path, &body.content_hash).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "recorded": true, "skill_id": id })),
+    ))
+}
+
+// DELETE /skills/{id}/materialization -- forget the materialization row.
+// Caller is expected to delete the on-disk .md separately.
+#[tracing::instrument(skip_all)]
+async fn forget_materialization_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, AppError> {
+    let n = skill_materializations::forget(&db, id).await?;
+    Ok(Json(json!({ "deleted": n, "skill_id": id })))
+}
+
+// GET /bundles -- list bundles with member counts.
+#[tracing::instrument(skip_all)]
+async fn list_bundles_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Query(params): Query<ListSkillsParams>,
+) -> Result<Json<Value>, AppError> {
+    let limit = clamp_limit(params.limit, 50, 500)?;
+    let bundles = skill_bundles::list_bundles(&db, limit).await?;
+    Ok(Json(json!({ "bundles": bundles, "count": bundles.len() })))
+}
+
+// POST /bundles -- create (or upsert by name) a bundle.
+#[tracing::instrument(skip_all)]
+async fn create_bundle_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Json(body): Json<CreateBundleBody>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    let id = skill_bundles::create_bundle(
+        &db,
+        &body.name,
+        body.description.as_deref(),
+        body.auto_generated.unwrap_or(false),
+    )
+    .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "id": id, "name": body.name })),
+    ))
+}
+
+// GET /bundles/{id} -- bundle metadata only; members come from the dedicated route.
+#[tracing::instrument(skip_all)]
+async fn get_bundle_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, AppError> {
+    let bundle = skill_bundles::get_bundle(&db, id).await?;
+    Ok(Json(json!(bundle)))
+}
+
+// DELETE /bundles/{id} -- drops the bundle and (via FK cascade) its members.
+#[tracing::instrument(skip_all)]
+async fn delete_bundle_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, AppError> {
+    skill_bundles::delete_bundle(&db, id).await?;
+    Ok(Json(json!({ "deleted": true, "id": id })))
+}
+
+// GET /bundles/{id}/skills -- ordered list of member skill ids.
+#[tracing::instrument(skip_all)]
+async fn list_bundle_members_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Path(id): Path<i64>,
+) -> Result<Json<Value>, AppError> {
+    let ids = skill_bundles::list_members(&db, id).await?;
+    Ok(Json(
+        json!({ "skill_ids": ids, "count": ids.len(), "bundle_id": id }),
+    ))
+}
+
+// POST /bundles/{id}/skills -- add one skill to a bundle.
+#[tracing::instrument(skip_all)]
+async fn add_bundle_member_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Path(id): Path<i64>,
+    Json(body): Json<AddBundleMemberBody>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    skill_bundles::add_member(&db, id, body.skill_id).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({ "added": true, "bundle_id": id, "skill_id": body.skill_id })),
+    ))
+}
+
+// DELETE /bundles/{id}/skills/{skill_id} -- remove one skill from a bundle.
+#[tracing::instrument(skip_all)]
+async fn remove_bundle_member_handler(
+    Auth(_auth): Auth,
+    ResolvedDb(db): ResolvedDb,
+    Path((bundle_id, skill_id)): Path<(i64, i64)>,
+) -> Result<Json<Value>, AppError> {
+    let n = skill_bundles::remove_member(&db, bundle_id, skill_id).await?;
+    Ok(Json(json!({
+        "deleted": n,
+        "bundle_id": bundle_id,
+        "skill_id": skill_id,
     })))
 }

@@ -11,6 +11,7 @@ use crate::App;
 use kleos_lib::Result;
 use serde_json::{json, Value};
 
+/// Static descriptor for a single MCP tool: name, description, and schema factory.
 #[derive(Clone, Copy)]
 pub struct ToolDef {
     pub name: &'static str,
@@ -18,6 +19,7 @@ pub struct ToolDef {
     pub input_schema: fn() -> Value,
 }
 
+/// Build a JSON Schema object from a properties map and required-field list.
 fn schema(props: Value, required: &[&str]) -> Value {
     json!({
         "type": "object",
@@ -27,12 +29,14 @@ fn schema(props: Value, required: &[&str]) -> Value {
     })
 }
 
+/// Returns the JSON Schema property block for the optional bearer token override.
 pub fn auth_prop() -> Value {
     json!({
         "bearer_token": { "type": "string", "description": "Optional bearer token override. Defaults to ENGRAM_MCP_BEARER_TOKEN." }
     })
 }
 
+/// Returns the full tool registry as JSON objects suitable for an MCP tool listing response.
 pub fn registry() -> Vec<Value> {
     all_tools()
         .into_iter()
@@ -46,6 +50,7 @@ pub fn registry() -> Vec<Value> {
         .collect()
 }
 
+/// Collects every registered tool definition from every sub-module.
 fn all_tools() -> Vec<ToolDef> {
     let mut out = Vec::new();
     memory::register(&mut out);
@@ -59,6 +64,7 @@ fn all_tools() -> Vec<ToolDef> {
     out
 }
 
+/// Routes an MCP tool call by name to its implementation and returns the result.
 #[tracing::instrument(skip(app, args), fields(name = %name))]
 pub async fn dispatch(app: &App, name: &str, args: Value) -> Result<Value> {
     match name {
@@ -127,6 +133,25 @@ pub async fn dispatch(app: &App, name: &str, args: Value) -> Result<Value> {
     }
 }
 
+/// Returns the minimum scope required to call a given MCP tool over HTTP.
+/// The local stdio MCP server does not use this (single-user, trusted).
+pub fn required_scope(name: &str) -> kleos_lib::auth::Scope {
+    use kleos_lib::auth::Scope;
+    match name {
+        // Admin tools -- heavy operations, data-destructive potential
+        n if n.starts_with("admin.") => Scope::Admin,
+        // Read-only tools
+        "memory.search" | "memory.get" | "memory.list" | "memory.get_by_content_hash" => Scope::Read,
+        "context.assemble_context" | "context.get_header" | "context.generate_prompt" => Scope::Read,
+        "graph.get_neighbors" | "graph.pagerank_top" | "graph.louvain_communities" | "graph.cooccurrence" => Scope::Read,
+        "skill.search" => Scope::Read,
+        n if n.starts_with("structural.") => Scope::Read,
+        // Everything else mutates state
+        _ => Scope::Write,
+    }
+}
+
+/// Merges extra tool properties with the auth property and builds the full input schema.
 pub fn with_auth_props(extra: Value, required: &[&str]) -> Value {
     let mut properties = auth_prop().as_object().cloned().unwrap_or_default();
     for (key, value) in extra.as_object().cloned().unwrap_or_default() {

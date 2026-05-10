@@ -117,6 +117,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(routes::health::router())
         .merge(routes::handoffs::router())
         .merge(routes::docs::router())
+        .merge(routes::dispatch::router())
         .merge(routes::memory::router())
         .merge(routes::admin::router())
         .merge(routes::tasks::router())
@@ -166,6 +167,8 @@ pub fn build_router(state: AppState) -> Router {
         .merge(routes::commerce::router())
         .merge(routes::well_known::router())
         .merge(routes::policy::router())
+        .merge(routes::users::router())
+        .merge(routes::mcp_schema::router())
         // Rate limit runs after auth (inner layer), then auth sets context (outer layer)
         .layer(axum_mw::from_fn_with_state(
             state.clone(),
@@ -191,10 +194,15 @@ pub fn build_router(state: AppState) -> Router {
     // Metrics endpoint is unauthenticated (for Prometheus scraping)
     let metrics_routes = crate::middleware::metrics::router();
 
+    // Public routes served without auth -- the MCP schema endpoint lets
+    // external proxies discover tool definitions at startup.
+    let public_routes = routes::mcp_schema::public_router();
+
     Router::new()
         .merge(api_routes)
         .merge(gui_routes)
         .merge(metrics_routes)
+        .merge(public_routes)
         // GUI SPA middleware intercepts HTML requests to SPA routes before API handlers
         .layer(axum_mw::from_fn_with_state(
             state.clone(),
@@ -296,6 +304,7 @@ pub async fn shutdown_signal() {
     tracing::info!("shutdown signal received, draining connections");
 }
 
+/// Bind the TCP listener and serve the Axum app until the cancellation token fires.
 #[tracing::instrument(skip(state, shutdown), fields(host = %state.config.host, port = state.config.port))]
 pub async fn run(
     state: AppState,

@@ -5,6 +5,7 @@ use kleos_lib::skills::{self, create_skill, evolver, search::search_skills, Crea
 use kleos_lib::Result;
 use serde_json::{json, Value};
 
+/// Appends all skill-related tool definitions to the shared registry.
 pub fn register(out: &mut Vec<ToolDef>) {
     out.extend([
         ToolDef {
@@ -46,6 +47,7 @@ pub fn register(out: &mut Vec<ToolDef>) {
     ]);
 }
 
+/// Search for skills by keyword or semantic query and return ranked results.
 #[tracing::instrument(skip(app, args), fields(tool = "skill.search"))]
 pub async fn skill_search(app: &App, args: Value) -> Result<Value> {
     let auth = resolve_auth(app, &args).await?;
@@ -58,6 +60,7 @@ pub async fn skill_search(app: &App, args: Value) -> Result<Value> {
     Ok(json!({"results": results, "count": results.len()}))
 }
 
+/// Apply LLM-driven patching to repair a broken skill by ID.
 #[tracing::instrument(skip(app, args), fields(tool = "skill.fix"))]
 pub async fn skill_fix(app: &App, args: Value) -> Result<Value> {
     let auth = resolve_auth(app, &args).await?;
@@ -73,6 +76,7 @@ pub async fn skill_fix(app: &App, args: Value) -> Result<Value> {
     Ok(json!(result))
 }
 
+/// Create a new skill from name and content and persist it to the local registry.
 #[tracing::instrument(skip(app, args), fields(tool = "skill.upload"))]
 pub async fn skill_upload(app: &App, args: Value) -> Result<Value> {
     let auth = resolve_auth(app, &args).await?;
@@ -110,11 +114,18 @@ pub async fn skill_upload(app: &App, args: Value) -> Result<Value> {
             .get("tags")
             .and_then(|v| serde_json::from_value(v.clone()).ok()),
         tool_deps: None,
+        // Skills Cloud (v50+) provenance: MCP-driven creates are not
+        // plugin-imported, so leave kind / source_* / content_hash unset.
+        kind: None,
+        source_plugin: None,
+        source_path: None,
+        content_hash: None,
     };
     let skill = create_skill(&app.db, req).await?;
     Ok(json!({"created": true, "skill": skill}))
 }
 
+/// Find skills relevant to a task and return their content as guidance context.
 #[tracing::instrument(skip(app, args), fields(tool = "skill.execute"))]
 pub async fn skill_execute(app: &App, args: Value) -> Result<Value> {
     let auth = resolve_auth(app, &args).await?;
