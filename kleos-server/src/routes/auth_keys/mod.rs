@@ -18,7 +18,7 @@ pub fn router() -> Router<AppState> {
         .route("/keys", post(create_key).get(list_keys))
         .route("/keys/{id}", delete(revoke_key))
         .route("/keys/rotate", post(rotate_key))
-        .route("/users", post(create_user).get(list_users))
+        // /users routes moved to routes::users module
         .route("/spaces", post(create_space).get(list_spaces))
         .route("/spaces/{id}", delete(delete_space))
 }
