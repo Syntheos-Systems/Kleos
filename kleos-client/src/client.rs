@@ -264,7 +264,7 @@ impl Client {
         let http = reqwest::Client::builder()
             .timeout(timeout)
             .build()
-            .unwrap_or_default();
+            .map_err(|e| format!("http client build failed: {e}"))?;
         let req = http.get(&url);
         let req = self.apply_auth(req, "GET", path, b"");
         let resp = req.send().await.map_err(|e| e.to_string())?;
@@ -290,7 +290,7 @@ impl Client {
         let http = reqwest::Client::builder()
             .timeout(timeout)
             .build()
-            .unwrap_or_default();
+            .map_err(|e| format!("http client build failed: {e}"))?;
         let req = http
             .post(&url)
             .header("Content-Type", "application/json")

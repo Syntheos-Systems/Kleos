@@ -2,7 +2,27 @@
 //! `kleos-mcp` tool list and the runtime dispatcher iterate this slice -- so
 //! adding a new route means a single new entry here, nothing else.
 
+use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use serde_json::Value;
+
+/// Characters to encode in path segments: everything except RFC 3986 unreserved chars.
+/// Crucially includes `/`, `?`, `#`, `%` so callers cannot inject path or query structure.
+const PATH_SEGMENT: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'%')
+    .add(b'<')
+    .add(b'>')
+    .add(b'?')
+    .add(b'`')
+    .add(b'{')
+    .add(b'}')
+    .add(b'/')
+    .add(b'@')
+    .add(b':')
+    .add(b'[')
+    .add(b']');
 
 /// HTTP method for a registered route.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,9 +100,22 @@ pub fn render_path(template: &str, args: &mut Value) -> Result<String, String> {
             .and_then(|m| m.remove(key))
             .ok_or_else(|| format!("missing path argument '{key}' for template {template}"))?;
         match value {
-            Value::String(s) => out.push_str(&s),
-            Value::Number(n) => out.push_str(&n.to_string()),
-            other => out.push_str(&other.to_string()),
+            Value::String(s) => {
+                out.push_str(&utf8_percent_encode(&s, PATH_SEGMENT).to_string());
+            }
+            Value::Number(n) => {
+                // Numbers are already safe (digits, sign, dot) -- no encoding needed.
+                out.push_str(&n.to_string());
+            }
+            Value::Bool(b) => {
+                out.push_str(if b { "true" } else { "false" });
+            }
+            other => {
+                return Err(format!(
+                    "path argument '{key}' must be a string, number, or bool (got {})",
+                    other
+                ));
+            }
         }
         rest = &after_open[close + 1..];
     }
