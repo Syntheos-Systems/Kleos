@@ -16,10 +16,7 @@ fn read_message<R: BufRead>(reader: &mut R) -> Result<Option<Value>, String> {
             break;
         }
         if let Some(value) = trimmed.strip_prefix("Content-Length:") {
-            let parsed = value
-                .trim()
-                .parse::<usize>()
-                .map_err(|e| e.to_string())?;
+            let parsed = value.trim().parse::<usize>().map_err(|e| e.to_string())?;
             content_length = Some(parsed);
         }
     }

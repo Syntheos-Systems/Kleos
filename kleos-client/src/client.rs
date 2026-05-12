@@ -259,11 +259,7 @@ impl Client {
     }
 
     /// Sends a GET request with a per-call timeout; returns an empty object on 404.
-    pub async fn get_with_timeout(
-        &self,
-        path: &str,
-        timeout: Duration,
-    ) -> Result<Value, String> {
+    pub async fn get_with_timeout(&self, path: &str, timeout: Duration) -> Result<Value, String> {
         let url = format!("{}{}", self.base_url, path);
         let http = reqwest::Client::builder()
             .timeout(timeout)

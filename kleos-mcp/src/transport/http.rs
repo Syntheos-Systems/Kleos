@@ -104,9 +104,7 @@ pub fn router(app: App) -> Router {
 /// Binds the listener and serves until shutdown.
 pub async fn serve(app: App, listen: &str) -> Result<(), String> {
     if bearer_token_from_env().is_none() {
-        return Err(
-            "KLEOS_MCP_BEARER_TOKEN must be set for HTTP transport".into(),
-        );
+        return Err("KLEOS_MCP_BEARER_TOKEN must be set for HTTP transport".into());
     }
     let addr: SocketAddr = listen
         .parse()

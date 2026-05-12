@@ -49,10 +49,7 @@ async fn tools_list_includes_memory_search() {
     let tools = resp["result"]["tools"]
         .as_array()
         .expect("tools must be an array");
-    let names: Vec<&str> = tools
-        .iter()
-        .filter_map(|t| t["name"].as_str())
-        .collect();
+    let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
     assert!(
         names.contains(&"memory.search"),
         "memory.search must be in tools/list, got {:?}",

@@ -27,15 +27,13 @@ impl App {
     /// loads a PIV / Ed25519 signer via the standard
     /// `RequestSigner::from_env_or_file` path.
     pub fn from_env() -> Result<Self, String> {
-        let base_url = std::env::var("KLEOS_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:4200".to_string());
+        let base_url =
+            std::env::var("KLEOS_URL").unwrap_or_else(|_| "http://127.0.0.1:4200".to_string());
         let host_label = hostname::get()
             .map(|h| h.to_string_lossy().to_string())
             .unwrap_or_else(|_| "unknown".into());
-        let agent_label =
-            std::env::var("KLEOS_AGENT_LABEL").unwrap_or_else(|_| "kleos-mcp".into());
-        let model_label =
-            std::env::var("KLEOS_MODEL_LABEL").unwrap_or_else(|_| "none".into());
+        let agent_label = std::env::var("KLEOS_AGENT_LABEL").unwrap_or_else(|_| "kleos-mcp".into());
+        let model_label = std::env::var("KLEOS_MODEL_LABEL").unwrap_or_else(|_| "none".into());
 
         let signer = kleos_lib::auth_piv::RequestSigner::from_env_or_file(
             &host_label,
@@ -47,6 +45,15 @@ impl App {
         let api_key = std::env::var("KLEOS_API_KEY")
             .ok()
             .filter(|k| !k.trim().is_empty());
+
+        if signer.is_none() && api_key.is_none() {
+            return Err(
+                "no auth configured: set KLEOS_IDENTITY_PATH (or run `kleos-cli identity init`) \
+                 for PIV signing, or set KLEOS_API_KEY as a bearer fallback. Refusing to start \
+                 unauthenticated."
+                    .to_string(),
+            );
+        }
 
         let client = Client::new(base_url, api_key, signer);
         Ok(Self {

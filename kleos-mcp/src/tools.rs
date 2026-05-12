@@ -14,18 +14,16 @@ use serde_json::{json, Value};
 pub fn registry() -> Vec<Value> {
     let mut out = Vec::with_capacity(ROUTES.len() * 2);
     for route in ROUTES {
-        let schema: Value = serde_json::from_str(route.input_schema).unwrap_or_else(|_| {
-            json!({ "type": "object", "additionalProperties": true })
-        });
+        let schema: Value = serde_json::from_str(route.input_schema)
+            .unwrap_or_else(|_| json!({ "type": "object", "additionalProperties": true }));
         out.push(json!({
             "name": route.name,
             "description": route.description,
             "inputSchema": schema,
         }));
         for alias in route.aliases {
-            let schema_clone: Value = serde_json::from_str(route.input_schema).unwrap_or_else(
-                |_| json!({ "type": "object", "additionalProperties": true }),
-            );
+            let schema_clone: Value = serde_json::from_str(route.input_schema)
+                .unwrap_or_else(|_| json!({ "type": "object", "additionalProperties": true }));
             out.push(json!({
                 "name": alias,
                 "description": route.description,

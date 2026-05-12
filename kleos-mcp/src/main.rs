@@ -15,7 +15,8 @@ struct Args {
 async fn main() {
     kleos_lib::config::migrate_env_prefix();
 
-    let _otel_guard = kleos_lib::observability::init_tracing("kleos-mcp", "kleos_mcp=info,warn,yubikey=off");
+    let _otel_guard =
+        kleos_lib::observability::init_tracing("kleos-mcp", "kleos_mcp=info,warn,yubikey=off");
 
     let args = Args::parse();
     let app = match kleos_mcp::App::from_env() {
