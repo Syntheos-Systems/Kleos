@@ -21,8 +21,8 @@ default = []
 http = ["dep:axum", "dep:tower-http", "dep:subtle"]
 
 [dependencies]
-kleos-lib = { path = "../kleos-lib", version = "1.0.0" }
-rusqlite = { workspace = true }
+kleos-lib = { path = "../kleos-lib", version = "1.0.0", features = ["piv"] }
+kleos-client = { path = "../kleos-client", version = "1.0.0" }
 axum = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 subtle = { workspace = true, optional = true }
@@ -32,15 +32,10 @@ serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-
-# Windows needs bundled SQLCipher since there's no system sqlite3.lib
-[target.'cfg(windows)'.dependencies]
-kleos-lib = { path = "../kleos-lib", version = "1.0.0", features = ["sqlcipher"] }
+hostname = "0.4"
 
 [dev-dependencies]
-axum = { workspace = true }
 tokio = { workspace = true }
-tower = { workspace = true, features = ["util"] }
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/kleos-mcp-{ target }{ archive-suffix }"

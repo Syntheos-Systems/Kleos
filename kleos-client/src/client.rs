@@ -1,0 +1,378 @@
+//! `Client` is the canonical HTTP client used to talk to `kleos-server`.
+//!
+//! Lifted verbatim from `kleos-cli/src/main.rs` so both `kleos-cli` and
+//! `kleos-mcp` (and any future Rust consumer) share one signing path.
+
+use crate::routes::{render_path, Method, Route};
+use serde_json::{json, Value};
+use std::time::Duration;
+
+/// HTTP client wrapper that handles auth, session capture, and base-URL composition.
+pub struct Client {
+    http: reqwest::Client,
+    base_url: String,
+    api_key: Option<String>,
+    pub signer: Option<kleos_lib::auth_piv::RequestSigner>,
+}
+
+/// Constructor and HTTP request helpers for `Client`.
+impl Client {
+    /// Constructs a new `Client` with the given base URL, optional API key, and optional PIV signer.
+    pub fn new(
+        base_url: String,
+        api_key: Option<String>,
+        signer: Option<kleos_lib::auth_piv::RequestSigner>,
+    ) -> Self {
+        Self {
+            http: reqwest::Client::new(),
+            base_url: base_url.trim_end_matches('/').to_string(),
+            api_key,
+            signer,
+        }
+    }
+
+    /// Returns the configured base URL.
+    pub fn base_url(&self) -> &str {
+        &self.base_url
+    }
+
+    /// Applies PIV-signed headers or bearer-token auth to a pending request.
+    pub fn apply_auth(
+        &self,
+        req: reqwest::RequestBuilder,
+        method: &str,
+        path: &str,
+        body: &[u8],
+    ) -> reqwest::RequestBuilder {
+        if let Some(signer) = &self.signer {
+            if let Some(session) = signer.cached_session() {
+                return req.header("X-Kleos-Session", session);
+            }
+            let (url_path, query) = match path.split_once('?') {
+                Some((p, q)) => (p, q),
+                None => (path, ""),
+            };
+            match signer.sign_request(method, url_path, query, body) {
+                Ok(signed) => return signed.apply_headers(req),
+                Err(e) => {
+                    eprintln!("warning: PIV signing failed, falling back to API key: {e}");
+                }
+            }
+        }
+        if let Some(key) = &self.api_key {
+            return req.bearer_auth(key);
+        }
+        req
+    }
+
+    /// Reads any session token issued by the server and caches it in the signer.
+    pub fn capture_session(&self, resp: &reqwest::Response) {
+        if let Some(signer) = &self.signer {
+            if let Some(token) = resp.headers().get("x-kleos-session-issued") {
+                if let Ok(t) = token.to_str() {
+                    signer.set_session(t.to_string());
+                }
+            }
+        }
+    }
+
+    /// Sends an authenticated GET request and returns the parsed JSON body.
+    pub async fn get(&self, path: &str) -> Result<Value, String> {
+        let url = format!("{}{}", self.base_url, path);
+        let req = self.http.get(&url);
+        let req = self.apply_auth(req, "GET", path, b"");
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format_reqwest_error("GET", &url, &e))?;
+        self.capture_session(&resp);
+        self.handle_response("GET", &url, resp).await
+    }
+
+    /// Sends an authenticated POST request with a JSON body and returns the parsed JSON response.
+    pub async fn post(&self, path: &str, body: Value) -> Result<Value, String> {
+        let url = format!("{}{}", self.base_url, path);
+        let body_bytes = serde_json::to_vec(&body).unwrap_or_default();
+        let req = self
+            .http
+            .post(&url)
+            .header("content-type", "application/json")
+            .body(body_bytes.clone());
+        let req = self.apply_auth(req, "POST", path, &body_bytes);
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format_reqwest_error("POST", &url, &e))?;
+        self.capture_session(&resp);
+        self.handle_response("POST", &url, resp).await
+    }
+
+    /// Sends an authenticated PUT request with a JSON body and returns the parsed JSON response.
+    pub async fn put(&self, path: &str, body: Value) -> Result<Value, String> {
+        let url = format!("{}{}", self.base_url, path);
+        let body_bytes = serde_json::to_vec(&body).unwrap_or_default();
+        let req = self
+            .http
+            .put(&url)
+            .header("content-type", "application/json")
+            .body(body_bytes.clone());
+        let req = self.apply_auth(req, "PUT", path, &body_bytes);
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format_reqwest_error("PUT", &url, &e))?;
+        self.capture_session(&resp);
+        self.handle_response("PUT", &url, resp).await
+    }
+
+    /// Sends an authenticated PATCH request with a JSON body and returns the parsed JSON response.
+    pub async fn patch(&self, path: &str, body: Value) -> Result<Value, String> {
+        let url = format!("{}{}", self.base_url, path);
+        let body_bytes = serde_json::to_vec(&body).unwrap_or_default();
+        let req = self
+            .http
+            .patch(&url)
+            .header("content-type", "application/json")
+            .body(body_bytes.clone());
+        let req = self.apply_auth(req, "PATCH", path, &body_bytes);
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format_reqwest_error("PATCH", &url, &e))?;
+        self.capture_session(&resp);
+        self.handle_response("PATCH", &url, resp).await
+    }
+
+    /// Sends an authenticated DELETE request and returns the parsed JSON response.
+    pub async fn delete(&self, path: &str) -> Result<Value, String> {
+        let url = format!("{}{}", self.base_url, path);
+        let req = self.http.delete(&url);
+        let req = self.apply_auth(req, "DELETE", path, b"");
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format_reqwest_error("DELETE", &url, &e))?;
+        self.capture_session(&resp);
+        self.handle_response("DELETE", &url, resp).await
+    }
+
+    /// Sends an authenticated multipart POST request and returns the parsed JSON response.
+    pub async fn post_multipart(
+        &self,
+        path: &str,
+        form: reqwest::multipart::Form,
+    ) -> Result<Value, String> {
+        let url = format!("{}{}", self.base_url, path);
+        let req = self.http.post(&url).multipart(form);
+        let req = self.apply_auth(req, "POST", path, b"");
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format_reqwest_error("POST", &url, &e))?;
+        self.capture_session(&resp);
+        self.handle_response("POST", &url, resp).await
+    }
+
+    /// Sends an authenticated GET and returns the raw bytes, filename, and content-type.
+    pub async fn get_bytes(&self, path: &str) -> Result<(Vec<u8>, String, String), String> {
+        let url = format!("{}{}", self.base_url, path);
+        let req = self.http.get(&url);
+        let req = self.apply_auth(req, "GET", path, b"");
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| format_reqwest_error("GET", &url, &e))?;
+        self.capture_session(&resp);
+        let status = resp.status();
+        if !status.is_success() {
+            let text = resp.text().await.unwrap_or_default();
+            return Err(format!("HTTP {}: {}", status, text));
+        }
+        let content_type = resp
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("application/octet-stream")
+            .to_string();
+        let filename = resp
+            .headers()
+            .get("content-disposition")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| {
+                v.split("filename=")
+                    .nth(1)
+                    .map(|f| f.trim_matches('"').to_string())
+            })
+            .unwrap_or_else(|| "artifact".to_string());
+        let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+        Ok((bytes.to_vec(), filename, content_type))
+    }
+
+    /// Interprets an HTTP response, returning parsed JSON on success or an error string on failure.
+    pub async fn handle_response(
+        &self,
+        method: &str,
+        url: &str,
+        resp: reqwest::Response,
+    ) -> Result<Value, String> {
+        let status = resp.status();
+
+        if status == reqwest::StatusCode::UNAUTHORIZED {
+            if let Some(signer) = &self.signer {
+                signer.clear_session();
+            }
+        }
+
+        let bytes = resp.bytes().await.map_err(|e| {
+            format!(
+                "{} {} succeeded but reading response body failed: {}",
+                method,
+                url,
+                format_error_chain(&e)
+            )
+        })?;
+        let parsed: Result<Value, _> = serde_json::from_slice(&bytes);
+        if status.is_success() {
+            parsed.map_err(|e| {
+                format!(
+                    "{} {} returned {} but body was not valid JSON: {} (body: {})",
+                    method,
+                    url,
+                    status,
+                    e,
+                    body_excerpt(&bytes)
+                )
+            })
+        } else {
+            let msg = parsed
+                .as_ref()
+                .ok()
+                .and_then(|b| {
+                    b.get("error")
+                        .or_else(|| b.get("message"))
+                        .and_then(|v| v.as_str())
+                        .map(ToOwned::to_owned)
+                })
+                .unwrap_or_else(|| body_excerpt(&bytes));
+            Err(format!("HTTP {}: {}", status, msg))
+        }
+    }
+
+    /// Sends a GET request with a per-call timeout; returns an empty object on 404.
+    pub async fn get_with_timeout(
+        &self,
+        path: &str,
+        timeout: Duration,
+    ) -> Result<Value, String> {
+        let url = format!("{}{}", self.base_url, path);
+        let http = reqwest::Client::builder()
+            .timeout(timeout)
+            .build()
+            .unwrap_or_default();
+        let req = http.get(&url);
+        let req = self.apply_auth(req, "GET", path, b"");
+        let resp = req.send().await.map_err(|e| e.to_string())?;
+        self.capture_session(&resp);
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        if status.is_success() || status.as_u16() == 404 {
+            Ok(serde_json::from_str(&text).unwrap_or(json!({})))
+        } else {
+            Err(format!("HTTP {}: {}", status, text))
+        }
+    }
+
+    /// Sends a POST request with a per-call timeout; useful for fire-and-forget activity reports.
+    pub async fn post_with_timeout(
+        &self,
+        path: &str,
+        body: Value,
+        timeout: Duration,
+    ) -> Result<Value, String> {
+        let url = format!("{}{}", self.base_url, path);
+        let body_bytes = serde_json::to_vec(&body).unwrap_or_default();
+        let http = reqwest::Client::builder()
+            .timeout(timeout)
+            .build()
+            .unwrap_or_default();
+        let req = http
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .body(body_bytes.clone());
+        let req = self.apply_auth(req, "POST", path, &body_bytes);
+        let resp = req.send().await.map_err(|e| e.to_string())?;
+        self.capture_session(&resp);
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        if status.is_success() {
+            Ok(serde_json::from_str(&text).unwrap_or(json!({"ok": true})))
+        } else {
+            Err(format!("HTTP {}: {}", status, text))
+        }
+    }
+
+    /// Dispatches a registered `Route`, filling path parameters from `args`,
+    /// applying the route's method, and returning the JSON response.
+    ///
+    /// `args` is mutated in place: keys consumed by the path template are
+    /// removed before the body is serialised so they do not double-up.
+    pub async fn call_route(&self, route: &Route, mut args: Value) -> Result<Value, String> {
+        let path = render_path(route.path, &mut args)?;
+        match route.method {
+            Method::Get => self.get(&path).await,
+            Method::Delete => self.delete(&path).await,
+            Method::Post => self.post(&path, args).await,
+            Method::Put => self.put(&path, args).await,
+            Method::Patch => self.patch(&path, args).await,
+        }
+    }
+
+    /// Returns the agent label from the PIV signer, or "claude-code" when no signer is configured.
+    pub fn agent_label(&self) -> String {
+        self.signer
+            .as_ref()
+            .map(|s| s.agent_label().to_string())
+            .unwrap_or_else(|| "claude-code".to_string())
+    }
+}
+
+/// Formats a reqwest transport error with method and URL context.
+pub fn format_reqwest_error(method: &str, url: &str, err: &reqwest::Error) -> String {
+    format!("{} {} failed: {}", method, url, format_error_chain(err))
+}
+
+/// Walks the error source chain and concatenates messages with " -> " separators.
+pub fn format_error_chain<E: std::error::Error + ?Sized>(err: &E) -> String {
+    let mut out = err.to_string();
+    let mut source: Option<&dyn std::error::Error> = err.source();
+    for _ in 0..16 {
+        let Some(cause) = source else { break };
+        out.push_str(" -> ");
+        out.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    out
+}
+
+/// Returns up to 512 bytes of the response body as a UTF-8 string for error messages.
+pub fn body_excerpt(bytes: &[u8]) -> String {
+    const MAX: usize = 512;
+    let s = String::from_utf8_lossy(bytes);
+    if s.len() <= MAX {
+        return s.into_owned();
+    }
+    let mut end = MAX;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}... ({} bytes total)", &s[..end], bytes.len())
+}
+
+/// Truncates a string to the given byte length.
+pub fn truncate(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        s
+    } else {
+        &s[..max]
+    }
+}

@@ -1,31 +1,46 @@
 #![cfg(feature = "http")]
 
+//! HTTP transport for kleos-mcp.
+//!
+//! Network-exposed, so bearer auth is mandatory; the env-var
+//! `KLEOS_MCP_BEARER_TOKEN` (or legacy `ENGRAM_MCP_BEARER_TOKEN`) must be set
+//! before `serve()` will start. This bearer token authenticates the MCP
+//! *client* to the MCP server; the MCP server then signs onward calls to
+//! `kleos-server` with its own PIV identity.
+
 use crate::{handle_jsonrpc, App};
 use axum::{
     body::Body,
-    extract::{ConnectInfo, DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, State},
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::post,
     Json, Router,
 };
-use kleos_lib::{EngError, Result};
 use serde_json::Value;
 use std::net::SocketAddr;
 use std::time::Duration;
 use subtle::ConstantTimeEq;
 use tower_http::timeout::TimeoutLayer;
 
-/// Maximum request body size for MCP HTTP: 2 MiB.
 const BODY_LIMIT: usize = 2 * 1024 * 1024;
-
-/// Request timeout for MCP HTTP transport: 30 seconds.
 const REQUEST_TIMEOUT_SECS: u64 = 30;
 
-/// Pre-auth per-IP throttle for MCP HTTP transport.
-const PREAUTH_IP_LIMIT: i64 = 60;
+/// Resolves the MCP bearer token from env. Prefers `KLEOS_MCP_BEARER_TOKEN`
+/// over the legacy `ENGRAM_MCP_BEARER_TOKEN`.
+fn bearer_token_from_env() -> Option<String> {
+    std::env::var("KLEOS_MCP_BEARER_TOKEN")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            std::env::var("ENGRAM_MCP_BEARER_TOKEN")
+                .ok()
+                .filter(|s| !s.is_empty())
+        })
+}
 
+/// Handles one `/mcp` JSON-RPC request.
 async fn mcp(State(app): State<App>, Json(body): Json<Value>) -> Json<Value> {
     let response = handle_jsonrpc(&app, body)
         .await
@@ -33,17 +48,14 @@ async fn mcp(State(app): State<App>, Json(body): Json<Value>) -> Json<Value> {
     Json(response)
 }
 
-/// Bearer token authentication middleware for MCP HTTP transport.
-///
-/// Requires `ENGRAM_MCP_BEARER_TOKEN` to be set when using HTTP transport.
-/// The env-var fallback that stdio transport relies on is intentionally
-/// mandatory here -- HTTP is network-exposed so ambient auth is never safe.
+/// Bearer-token middleware. Refuses to forward the request unless the
+/// Authorization header matches the configured token in constant time.
 async fn bearer_auth(request: Request<Body>, next: Next) -> Response {
-    let token = match std::env::var("ENGRAM_MCP_BEARER_TOKEN") {
-        Ok(t) if !t.is_empty() => t,
-        _ => {
+    let token = match bearer_token_from_env() {
+        Some(t) => t,
+        None => {
             tracing::error!(
-                "ENGRAM_MCP_BEARER_TOKEN not set; MCP HTTP transport requires a bearer token"
+                "KLEOS_MCP_BEARER_TOKEN not set; MCP HTTP transport requires a bearer token"
             );
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -76,51 +88,10 @@ async fn bearer_auth(request: Request<Body>, next: Next) -> Response {
     next.run(request).await
 }
 
-async fn preauth_rate_limit(
-    State(app): State<App>,
-    request: Request<Body>,
-    next: Next,
-) -> Response {
-    // Use the real TCP peer address from ConnectInfo (injected by
-    // into_make_service_with_connect_info) instead of the spoofable
-    // x-forwarded-for header.
-    let key = request
-        .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ci| format!("mcp:http:{}", ci.0.ip()))
-        .unwrap_or_else(|| "mcp:http:unknown".to_string());
-
-    match kleos_lib::ratelimit::check_and_increment(&app.db, &key, PREAUTH_IP_LIMIT, 60).await {
-        Ok(true) => next.run(request).await,
-        Ok(false) => (
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(serde_json::json!({
-                "error": "rate limit exceeded",
-                "retry_after": 60
-            })),
-        )
-            .into_response(),
-        Err(e) => {
-            tracing::error!(error = %e, key = %key, "MCP HTTP rate-limit check failed");
-            (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({
-                    "error": "rate limit backend unavailable",
-                    "retry_after": 5
-                })),
-            )
-                .into_response()
-        }
-    }
-}
-
+/// Assembles the Axum router with auth + size + timeout layers.
 pub fn router(app: App) -> Router {
     Router::new()
         .route("/mcp", post(mcp))
-        .layer(middleware::from_fn_with_state(
-            app.clone(),
-            preauth_rate_limit,
-        ))
         .layer(middleware::from_fn(bearer_auth))
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
         .layer(TimeoutLayer::with_status_code(
@@ -130,29 +101,21 @@ pub fn router(app: App) -> Router {
         .with_state(app)
 }
 
-pub async fn serve(app: App, listen: &str) -> Result<()> {
-    // Refuse to start without a bearer token configured.
-    if std::env::var("ENGRAM_MCP_BEARER_TOKEN")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .is_none()
-    {
-        return Err(EngError::Internal(
-            "ENGRAM_MCP_BEARER_TOKEN must be set for HTTP transport".into(),
-        ));
+/// Binds the listener and serves until shutdown.
+pub async fn serve(app: App, listen: &str) -> Result<(), String> {
+    if bearer_token_from_env().is_none() {
+        return Err(
+            "KLEOS_MCP_BEARER_TOKEN must be set for HTTP transport".into(),
+        );
     }
-
     let addr: SocketAddr = listen
         .parse()
-        .map_err(|e| EngError::Internal(format!("invalid listen address: {e}")))?;
+        .map_err(|e| format!("invalid listen address: {e}"))?;
     let listener = tokio::net::TcpListener::bind(addr)
         .await
-        .map_err(|e| EngError::Internal(e.to_string()))?;
+        .map_err(|e| e.to_string())?;
     tracing::info!(addr = %addr, "MCP HTTP transport listening (auth required)");
-    axum::serve(
-        listener,
-        router(app).into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .await
-    .map_err(|e| EngError::Internal(e.to_string()))
+    axum::serve(listener, router(app))
+        .await
+        .map_err(|e| e.to_string())
 }

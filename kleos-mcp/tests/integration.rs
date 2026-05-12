@@ -1,226 +1,87 @@
+//! Smoke tests for kleos-mcp's JSON-RPC envelope handling and tool registry.
+//!
+//! These tests do NOT hit a real kleos-server. They verify the surface
+//! the MCP client sees: protocol version, tools/list payload shape, and
+//! that calls to unknown tools return an error envelope. Live wire tests
+//! belong in a separate smoke harness pointed at `$KLEOS_URL`, so the
+//! unit tests stay green offline.
+//!
+//! `test_app` constructs an `App` pointed at a non-routable address; the
+//! tests below never invoke a route, only the registry + dispatch paths.
+
+use kleos_client::Client;
 use kleos_mcp::{handle_jsonrpc, App};
 use serde_json::json;
+use std::sync::Arc;
 
-async fn test_app_and_token() -> (App, String) {
-    let app = App::for_tests().await.unwrap();
-    app.db
-        .write(|conn| {
-            conn.execute(
-                "INSERT INTO users (username, email, role, is_admin) VALUES ('mcp-test', 'mcp@example.com', 'admin', 1)",
-                (),
-            )
-            .map_err(|e| kleos_lib::EngError::DatabaseMessage(e.to_string()))?;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    let (_, token) = kleos_lib::auth::create_key(
-        &app.db,
-        1,
-        "mcp-test",
-        vec![
-            kleos_lib::auth::Scope::Read,
-            kleos_lib::auth::Scope::Write,
-            kleos_lib::auth::Scope::Admin,
-        ],
-        None,
-    )
-    .await
-    .unwrap();
-    (app, token)
+/// Builds an App that will never be asked to make a network call.
+fn test_app() -> App {
+    let client = Client::new("http://127.0.0.1:1".into(), None, None);
+    App {
+        client: Arc::new(client),
+    }
 }
 
-async fn call(
-    app: &App,
-    token: &str,
-    name: &str,
-    arguments: serde_json::Value,
-) -> serde_json::Value {
-    let mut args = arguments.as_object().cloned().unwrap_or_default();
-    args.insert("bearer_token".into(), json!(token));
-    handle_jsonrpc(
-        app,
+/// `initialize` must echo the supported MCP protocol version and the server name.
+#[tokio::test]
+async fn initialize_returns_protocol_version() {
+    let app = test_app();
+    let resp = handle_jsonrpc(
+        &app,
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}),
+    )
+    .await
+    .expect("initialize must return a response");
+    assert_eq!(resp["result"]["protocolVersion"], "2024-11-05");
+    assert_eq!(resp["result"]["serverInfo"]["name"], "kleos-mcp");
+}
+
+/// `tools/list` must enumerate the registry, including the daily-driver tools.
+#[tokio::test]
+async fn tools_list_includes_memory_search() {
+    let app = test_app();
+    let resp = handle_jsonrpc(
+        &app,
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}),
+    )
+    .await
+    .expect("tools/list must return a response");
+    let tools = resp["result"]["tools"]
+        .as_array()
+        .expect("tools must be an array");
+    let names: Vec<&str> = tools
+        .iter()
+        .filter_map(|t| t["name"].as_str())
+        .collect();
+    assert!(
+        names.contains(&"memory.search"),
+        "memory.search must be in tools/list, got {:?}",
+        names
+    );
+    assert!(
+        names.contains(&"memory.store"),
+        "memory.store must be in tools/list, got {:?}",
+        names
+    );
+}
+
+/// Unknown tool names must return an error result, not a JSON-RPC fault.
+#[tokio::test]
+async fn unknown_tool_returns_error_envelope() {
+    let app = test_app();
+    let resp = handle_jsonrpc(
+        &app,
         json!({
             "jsonrpc": "2.0",
-            "id": 1,
+            "id": 3,
             "method": "tools/call",
             "params": {
-                "name": name,
-                "arguments": args,
+                "name": "definitely.not.a.real.tool",
+                "arguments": {}
             }
         }),
     )
     .await
-    .unwrap()
-}
-
-#[tokio::test]
-async fn initialize_and_list_tools() {
-    let (app, _) = test_app_and_token().await;
-    let init = handle_jsonrpc(
-        &app,
-        json!({
-            "jsonrpc":"2.0","id":1,"method":"initialize","params":{}
-        }),
-    )
-    .await
-    .unwrap();
-    assert_eq!(init["result"]["serverInfo"]["name"], "engram-mcp");
-
-    let list = handle_jsonrpc(
-        &app,
-        json!({
-            "jsonrpc":"2.0","id":2,"method":"tools/list","params":{}
-        }),
-    )
-    .await
-    .unwrap();
-    let tools = list["result"]["tools"].as_array().unwrap();
-    assert!(tools.len() >= 30);
-}
-
-#[tokio::test]
-async fn memory_round_trip_and_service_tools() {
-    let (app, token) = test_app_and_token().await;
-
-    let stored = call(
-        &app,
-        &token,
-        "memory.store",
-        json!({
-            "content": "The MCP integration stores searchable test memories.",
-            "category": "reference"
-        }),
-    )
-    .await;
-    assert_eq!(stored["result"]["isError"], false);
-
-    let search = call(
-        &app,
-        &token,
-        "memory.search",
-        json!({
-            "query": "searchable test memories",
-            "limit": 5
-        }),
-    )
-    .await;
-    assert_eq!(search["result"]["isError"], false);
-
-    let task = call(
-        &app,
-        &token,
-        "services.chiasm_create_task",
-        json!({
-            "agent": "tester",
-            "project": "engram-mcp",
-            "title": "verify tool coverage"
-        }),
-    )
-    .await;
-    assert_eq!(task["result"]["isError"], false);
-
-    let event = call(
-        &app,
-        &token,
-        "services.axon_publish",
-        json!({
-            "channel": "tasks",
-            "action": "task.started",
-            "payload": {"id": 1}
-        }),
-    )
-    .await;
-    assert_eq!(event["result"]["isError"], false);
-}
-
-#[cfg(feature = "http")]
-#[tokio::test]
-async fn http_transport_round_trip() {
-    use axum::body::Body;
-    use axum::http::{Request, StatusCode};
-    use tower::util::ServiceExt;
-
-    let (app, token) = test_app_and_token().await;
-    let router = kleos_mcp::transport::http::router(app.clone());
-
-    let init = router
-        .clone()
-        .oneshot(
-            Request::post("/mcp")
-                .header("authorization", "Bearer not-the-right-token")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "jsonrpc":"2.0",
-                        "id":1,
-                        "method":"initialize",
-                        "params":{}
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(init.status(), StatusCode::SERVICE_UNAVAILABLE);
-
-    std::env::set_var("ENGRAM_MCP_BEARER_TOKEN", "transport-secret");
-
-    let init = router
-        .clone()
-        .oneshot(
-            Request::post("/mcp")
-                .header("authorization", "Bearer transport-secret")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "jsonrpc":"2.0",
-                        "id":1,
-                        "method":"initialize",
-                        "params":{}
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(init.status(), StatusCode::OK);
-
-    let store = router
-        .clone()
-        .oneshot(
-            Request::post("/mcp")
-                .header("authorization", "Bearer transport-secret")
-                .header("content-type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "jsonrpc":"2.0",
-                        "id":2,
-                        "method":"tools/call",
-                        "params":{
-                            "name":"memory.store",
-                            "arguments":{
-                                "bearer_token": token,
-                                "content":"HTTP MCP transport stores memories too.",
-                                "category":"reference"
-                            }
-                        }
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(store.status(), StatusCode::OK);
-
-    let body = axum::body::to_bytes(store.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(payload["result"]["isError"], false);
-
-    std::env::remove_var("ENGRAM_MCP_BEARER_TOKEN");
+    .expect("tools/call must always return a response");
+    assert_eq!(resp["result"]["isError"], true);
 }

@@ -1,0 +1,10 @@
+//! Shared HTTP client used by `kleos-cli` and `kleos-mcp` to talk to
+//! `kleos-server`. Handles PIV-signed envelope auth via
+//! `kleos_lib::auth_piv::RequestSigner`, bearer-token fallback for legacy
+//! callers, session-token capture, and uniform error formatting.
+
+mod client;
+pub mod routes;
+
+pub use client::{body_excerpt, format_error_chain, format_reqwest_error, truncate, Client};
+pub use routes::{find_by_name, render_path, Method, Route, Scope, ROUTES};

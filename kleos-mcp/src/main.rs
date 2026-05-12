@@ -1,5 +1,6 @@
 use clap::Parser;
 
+/// CLI flags for the kleos-mcp binary.
 #[derive(Debug, Parser)]
 struct Args {
     #[arg(long, default_value = "stdio")]
@@ -9,16 +10,21 @@ struct Args {
     listen: String,
 }
 
+/// Binary entry point: parse args, build the App, run the chosen transport.
 #[tokio::main]
 async fn main() {
     kleos_lib::config::migrate_env_prefix();
 
-    let _otel_guard = kleos_lib::observability::init_tracing("engram-mcp", "kleos_mcp=info");
+    let _otel_guard = kleos_lib::observability::init_tracing("kleos-mcp", "kleos_mcp=info,warn,yubikey=off");
 
     let args = Args::parse();
-    let app = kleos_mcp::App::from_env()
-        .await
-        .expect("failed to initialize engram-mcp");
+    let app = match kleos_mcp::App::from_env() {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("kleos-mcp failed to start: {e}");
+            std::process::exit(1);
+        }
+    };
 
     match args.transport.as_str() {
         "stdio" => kleos_mcp::transport::stdio::serve(app)
