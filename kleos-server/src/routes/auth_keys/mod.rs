@@ -237,6 +237,7 @@ async fn rotate_key(
 
 // ---- User Management ----
 
+#[allow(dead_code)]
 async fn create_user(
     State(state): State<AppState>,
     Auth(auth_ctx): Auth,
@@ -298,6 +299,7 @@ async fn create_user(
     ))
 }
 
+#[allow(dead_code)]
 async fn list_users(
     State(state): State<AppState>,
     Auth(auth_ctx): Auth,

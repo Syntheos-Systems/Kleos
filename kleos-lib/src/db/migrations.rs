@@ -515,6 +515,13 @@ pub static MIGRATIONS: &[Migration] = &[
         down: Some(down_migration_skill_dispatch_configs),
         transactional: true,
     },
+    Migration {
+        version: 58,
+        description: "api_key_hash_version_fixup",
+        up: run_migration_api_key_hash_version_fixup,
+        down: None,
+        transactional: true,
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -635,6 +642,8 @@ const MIGRATION_HANDOFFS_GLOBAL: i64 = 55;
 const MIGRATION_USER_ACTIVE_AND_INVITES: i64 = 56;
 /// Version number for the skill_dispatch_configs table migration.
 const MIGRATION_SKILL_DISPATCH_CONFIGS: i64 = 57;
+/// Version number for the api_key hash_version idempotent fixup migration.
+const MIGRATION_API_KEY_HASH_VERSION_FIXUP: i64 = 58;
 
 // ---------------------------------------------------------------------------
 // Up path (unchanged behavior)
@@ -1088,6 +1097,16 @@ pub fn run_migrations(conn: &rusqlite::Connection) -> Result<()> {
             conn,
             MIGRATION_SKILL_DISPATCH_CONFIGS,
             "skill_dispatch_configs",
+        )?;
+    }
+
+    if current_version < MIGRATION_API_KEY_HASH_VERSION_FIXUP {
+        info!("Running migration 58: api_key_hash_version_fixup");
+        run_migration_api_key_hash_version_fixup(conn)?;
+        record_migration(
+            conn,
+            MIGRATION_API_KEY_HASH_VERSION_FIXUP,
+            "api_key_hash_version_fixup",
         )?;
     }
 
@@ -1688,9 +1707,12 @@ fn run_migration_api_key_hash_unique(conn: &rusqlite::Connection) -> Result<()> 
 /// - v1 (default): legacy SHA-256(raw_key)
 /// - v2: SHA-256(pepper || raw_key) when ENGRAM_API_KEY_PEPPER is set
 fn run_migration_api_key_hash_version(conn: &rusqlite::Connection) -> Result<()> {
-    conn.execute_batch("ALTER TABLE api_keys ADD COLUMN hash_version INTEGER NOT NULL DEFAULT 1;")
-        .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
-    Ok(())
+    add_column_if_not_exists(
+        conn,
+        "api_keys",
+        "hash_version",
+        "INTEGER NOT NULL DEFAULT 1",
+    )
 }
 
 /// Down for migration 19: drop the hash_version column. Requires SQLite 3.35+.
@@ -3879,6 +3901,16 @@ fn down_migration_skill_dispatch_configs(conn: &rusqlite::Connection) -> Result<
     )
     .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
     Ok(())
+}
+
+/// Migration 58: idempotent fixup for api_keys.hash_version column.
+fn run_migration_api_key_hash_version_fixup(conn: &rusqlite::Connection) -> Result<()> {
+    add_column_if_not_exists(
+        conn,
+        "api_keys",
+        "hash_version",
+        "INTEGER NOT NULL DEFAULT 1",
+    )
 }
 
 // ---------------------------------------------------------------------------

@@ -290,6 +290,11 @@ pub static TENANT_MIGRATIONS: &[TenantMigration] = &[
         description: "skills_cloud_kind_aliases_bundles",
         up: apply_schema_v50_skills_cloud,
     },
+    TenantMigration {
+        version: 51,
+        description: "memories_community_id",
+        up: apply_schema_v51_memories_community_id,
+    },
 ];
 
 /// Tenant v1: applies the initial tenant schema from the embedded SQL file.
@@ -774,6 +779,19 @@ fn apply_schema_v50_skills_cloud(conn: &Connection) -> Result<()> {
     .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v50 (tables) failed: {e}")))?;
 
     Ok(())
+}
+
+/// Tenant v51: adds community_id to tenant memories for graph community detection.
+fn apply_schema_v51_memories_community_id(conn: &Connection) -> Result<()> {
+    if !table_has_column(conn, "memories", "community_id")? {
+        conn.execute_batch("ALTER TABLE memories ADD COLUMN community_id INTEGER;")
+            .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v51 failed: {e}")))?;
+    }
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_memories_community \
+            ON memories(community_id) WHERE community_id IS NOT NULL;",
+    )
+    .map_err(|e| EngError::DatabaseMessage(format!("tenant schema v51 index failed: {e}")))
 }
 
 /// Returns true if `column` exists in `table`; false otherwise.

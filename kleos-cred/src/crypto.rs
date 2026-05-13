@@ -378,6 +378,7 @@ mod tests {
         assert_eq!(hash1.len(), 64); // SHA-256 hex = 64 chars
     }
 
+    #[allow(deprecated)]
     #[test]
     fn derive_key_legacy_deterministic() {
         let response = b"yubikey-hmac-response-20-bytes!";
@@ -386,6 +387,7 @@ mod tests {
         assert_eq!(key1, key2);
     }
 
+    #[allow(deprecated)]
     #[test]
     fn derive_key_legacy_differs_from_new() {
         // Legacy and new KDF must produce different keys (different params/salt)

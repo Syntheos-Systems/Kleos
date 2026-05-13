@@ -12,6 +12,8 @@
 
 # Agent/IDE config (private)
 CLAUDE.md
+AGENTS.md
+GEMINI.md
 .claude/
 .codex
 .worktrees/

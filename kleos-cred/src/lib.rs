@@ -19,6 +19,7 @@ pub mod types;
 pub mod yubikey;
 
 pub use agent_keys::{AgentKey, AgentKeyPermissions};
+#[allow(deprecated)]
 pub use crypto::{
     decrypt, decrypt_recovery, decrypt_secret, derive_key, derive_key_from_passphrase,
     derive_key_legacy, encrypt, encrypt_recovery, encrypt_secret, generate_hmac_secret,

@@ -17,7 +17,6 @@ pub struct StructuredFact {
     pub predicate: String,
     pub object: String,
     pub confidence: f64,
-    pub user_id: i64,
     pub created_at: String,
 }
 
@@ -28,7 +27,6 @@ pub struct CreateFactRequest {
     pub predicate: String,
     pub object: String,
     pub confidence: Option<f64>,
-    pub user_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,8 +42,7 @@ pub struct CurrentState {
 
 // -- Constants ---
 
-const FACT_COLUMNS: &str =
-    "id, memory_id, subject, predicate, object, confidence, user_id, created_at";
+const FACT_COLUMNS: &str = "id, memory_id, subject, predicate, object, confidence, created_at";
 
 const STATE_COLUMNS: &str = "id, agent, key, value, created_at, updated_at";
 
@@ -59,8 +56,7 @@ fn row_to_fact(row: &rusqlite::Row<'_>) -> rusqlite::Result<StructuredFact> {
         predicate: row.get(3)?,
         object: row.get(4)?,
         confidence: row.get(5)?,
-        user_id: row.get(6)?,
-        created_at: row.get(7)?,
+        created_at: row.get(6)?,
     })
 }
 
@@ -79,11 +75,8 @@ fn row_to_state(row: &rusqlite::Row<'_>) -> rusqlite::Result<CurrentState> {
 // -- Structured facts CRUD ---
 
 /// Create a new structured fact.
-#[tracing::instrument(skip(db, req), fields(user_id = ?req.user_id, subject = %req.subject, predicate = %req.predicate, memory_id = ?req.memory_id))]
+#[tracing::instrument(skip(db, req), fields(subject = %req.subject, predicate = %req.predicate, memory_id = ?req.memory_id))]
 pub async fn create_fact(db: &Database, req: CreateFactRequest) -> Result<StructuredFact> {
-    let _user_id = req
-        .user_id
-        .ok_or_else(|| crate::EngError::InvalidInput("user_id required".into()))?;
     let confidence = req.confidence.unwrap_or(1.0);
 
     if let Some(mid) = req.memory_id {

@@ -4702,10 +4702,7 @@ mod tests {
             "/memory/42"
         );
         let mut args = json!({ "flag": true });
-        assert_eq!(
-            render_path("/x/{flag}", &mut args).unwrap(),
-            "/x/true"
-        );
+        assert_eq!(render_path("/x/{flag}", &mut args).unwrap(), "/x/true");
     }
 
     /// Arrays, objects, and null are not valid path-segment values and must
@@ -4753,7 +4750,9 @@ mod tests {
             let mut rest = route.path;
             while let Some(open) = rest.find('{') {
                 let after = &rest[open + 1..];
-                let close = after.find('}').expect("malformed path template in registry");
+                let close = after
+                    .find('}')
+                    .expect("malformed path template in registry");
                 let key = &after[..close];
                 assert!(
                     key_re(key),
@@ -4773,8 +4772,7 @@ mod tests {
         if s.is_empty() || s.len() > 64 {
             return false;
         }
-        s.bytes().all(|b| {
-            b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'-'
-        })
+        s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'-')
     }
 }

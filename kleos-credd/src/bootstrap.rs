@@ -101,6 +101,7 @@ pub async fn load_bootstrap_blob(master_key: &[u8; KEY_SIZE]) -> Result<Option<Z
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[allow(deprecated)]
     use kleos_cred::crypto::{derive_key_legacy, encrypt};
     use tokio::sync::Mutex;
 
@@ -109,8 +110,8 @@ mod tests {
     // Uses tokio::sync::Mutex so the guard is Send -- no await_holding_lock lint.
     static ENV_GUARD: Mutex<()> = Mutex::const_new(());
 
+    #[allow(deprecated)]
     fn test_key() -> [u8; KEY_SIZE] {
-        // Deterministic test key: legacy KDF over a fixed pseudo-YubiKey response.
         derive_key_legacy(b"01234567890123456789")
     }
 

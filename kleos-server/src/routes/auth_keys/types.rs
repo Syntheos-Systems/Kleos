@@ -19,6 +19,7 @@ pub(super) struct RotateKeyBody {
     pub grace_hours: Option<i64>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub(super) struct CreateUserBody {
     pub username: String,

@@ -256,6 +256,7 @@ pub fn device_info() -> Result<String> {
 ///
 /// Loads the stored challenge, sends it to the YubiKey, and derives
 /// the encryption key using the legacy KDF (compatible with private cred).
+#[allow(deprecated)]
 pub fn derive_master_key() -> Result<[u8; crate::crypto::KEY_SIZE]> {
     let challenge = get_or_create_challenge()?;
     let response = challenge_response(&challenge)?;

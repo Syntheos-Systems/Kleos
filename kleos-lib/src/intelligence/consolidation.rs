@@ -303,10 +303,10 @@ pub async fn sweep(db: &Database, user_id: i64, threshold: f64) -> Result<SweepR
 }
 
 /// List recent consolidation records.
-#[tracing::instrument(skip(db), fields(user_id, limit))]
+#[tracing::instrument(skip(db), fields(limit))]
 pub async fn list_consolidations(
     db: &Database,
-    user_id: i64,
+    _user_id: i64,
     limit: usize,
 ) -> Result<Vec<ConsolidationRecord>> {
     db.read(move |conn| {
@@ -315,13 +315,12 @@ pub async fn list_consolidations(
                 "SELECT c.id, m.content \
                  FROM consolidations c \
                  JOIN memories m ON m.id = c.result_memory_id \
-                 WHERE c.user_id = ?1 \
                  ORDER BY c.created_at DESC \
-                 LIMIT ?2",
+                 LIMIT ?1",
             )
             .map_err(rusqlite_to_eng_error)?;
         let mut rows = stmt
-            .query(rusqlite::params![user_id, limit as i64])
+            .query(rusqlite::params![limit as i64])
             .map_err(rusqlite_to_eng_error)?;
         let mut records = Vec::new();
         while let Some(row) = rows.next().map_err(rusqlite_to_eng_error)? {

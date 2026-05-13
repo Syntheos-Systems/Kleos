@@ -16,6 +16,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
+#[allow(deprecated)]
 use kleos_cred::crypto::{
     decrypt as crypto_decrypt, decrypt_recovery, derive_key_legacy, encrypt as crypto_encrypt,
     encrypt_recovery, generate_hmac_secret, KEY_SIZE,
@@ -384,6 +385,7 @@ fn shellexpand(path: &str) -> String {
 }
 
 /// Derive master key from YubiKey using legacy (private cred compatible) KDF.
+#[allow(deprecated)]
 fn derive_master_key_yubikey() -> Result<[u8; KEY_SIZE]> {
     let challenge = yubikey::get_or_create_challenge().context("failed to get challenge file")?;
 
@@ -2866,6 +2868,7 @@ async fn cmd_ssh_ca(cmd: SshCaCmd) -> Result<()> {
 mod bootstrap_tests {
     use super::*;
 
+    #[allow(deprecated)]
     #[test]
     fn cbv1_format_roundtrip() {
         let key = derive_key_legacy(b"01234567890123456789");
