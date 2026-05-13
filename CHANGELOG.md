@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-05-12
+
+### Added
+
+- `kleos-client` shared crate: route registry + signed HTTP client extracted from `kleos-cli` so MCP, CLI, and any future tool share the same auth and dispatch code
+- `kleos-mcp` route registry expanded from 229 to 466 canonical routes (485 tools including back-compat aliases) -- full kleos-server HTTP surface is now reachable via MCP
+- `kleos-mcp` HTTP transport (`--transport http --listen <addr>`) -- one sidecar per host serves MCP over JSON-RPC to multiple local clients
+- `kleos-cli activity` subcommand -- PIV-signed `/activity` reporter for agents that prefer the CLI over direct HTTP
+- `render_path` helper for path template substitution with safe percent-encoding
+
+### Changed
+
+- `kleos-mcp` is now a thin proxy: dispatches every tool call to kleos-server via signed HTTP rather than holding its own database/LLM connections. Schema and per-tool logic live in `kleos-client::routes::ROUTES`, not per-handler code
+- `kleos-server` no longer exposes `POST /mcp/dispatch`; dispatch is owned exclusively by the kleos-mcp sidecar
+- Default LLM route timeout raised from 60s to 200s; global request timeout raised to 630s (env-overridable) then to 1800s to match CPU-only LLM workloads
+- README rewritten to position Kleos as cognitive infrastructure rather than a memory engine
+- Homepage URLs updated from engram.syntheos.dev to kleos.syntheos.dev
+
+### Fixed
+
+- `render_path` now percent-encodes path-segment substitutions (CWE-74 / CWE-918): an MCP client cannot pivot the URL to another route via `/`, `?`, `#`, or `%` in a string argument; non-scalar (array/object/null) path args are rejected outright. Regression coverage added in `kleos-client/src/routes.rs` tests
+- `get_with_timeout` / `post_with_timeout` in `kleos-client`: `reqwest::ClientBuilder::build().unwrap_or_default()` silently disarmed the per-call timeout on builder failure; builder errors now propagate
+
+### Security
+
+- `kleos-mcp` HTTP transport drops front-door bearer auth -- reachability (bind address) is the access-control boundary, consistent with kleos-cli. Operators must bind to a private interface (loopback, LAN, mesh)
+- `kleos-mcp` hard-fails at startup if neither a PIV signer nor `KLEOS_API_KEY` is configured -- refuses to start unauthenticated
+- Private infrastructure references (internal IPs, mesh network IDs, personal hostnames, agent-config artifacts) scrubbed from tracked files in dedicated commits (b83a972, b5810f6, bdaadb3) prior to public release work
+
 ## [1.0.0] - 2026-05-10
 
 ### Added
