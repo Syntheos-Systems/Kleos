@@ -3184,15 +3184,6 @@ pub static ROUTES: &[Route] = &[
         input_schema: r#"{"type":"object","additionalProperties":true}"#,
     },
     Route {
-        name: "gui.serve_app_assets",
-        aliases: &[],
-        method: Method::Get,
-        path: "/_app/{*path}",
-        scope: Scope::Read,
-        description: "Auto: GET /_app/{*path}.",
-        input_schema: r#"{"type":"object","additionalProperties":true,"properties":{"*path":{}},"required":["*path"]}"#,
-    },
-    Route {
         name: "gui.auth",
         aliases: &[],
         method: Method::Post,
@@ -4747,5 +4738,43 @@ mod tests {
     fn render_path_errors_on_missing_key() {
         let mut args = json!({});
         assert!(render_path("/memory/{id}", &mut args).is_err());
+    }
+
+    /// Every route in the registry must have a template key set and an
+    /// input-schema property name that matches Anthropic's MCP tool-schema
+    /// regex `^[a-zA-Z0-9_.-]{1,64}$`. Axum wildcard templates like
+    /// `/_app/{*path}` violate this (leading `*`), and their multi-segment
+    /// slash semantics are incompatible with percent-encoded path-segment
+    /// substitution -- such routes must not appear in the registry.
+    #[test]
+    fn registry_property_keys_match_mcp_regex() {
+        let key_re = regex_lite_match;
+        for route in ROUTES {
+            let mut rest = route.path;
+            while let Some(open) = rest.find('{') {
+                let after = &rest[open + 1..];
+                let close = after.find('}').expect("malformed path template in registry");
+                let key = &after[..close];
+                assert!(
+                    key_re(key),
+                    "route {} has template key {:?} that fails Anthropic MCP regex \
+                     ^[a-zA-Z0-9_.-]{{1,64}}$",
+                    route.name,
+                    key
+                );
+                rest = &after[close + 1..];
+            }
+        }
+    }
+
+    /// Inline minimal matcher for `^[a-zA-Z0-9_.-]{1,64}$` so we do not pull
+    /// the `regex` crate just for one test.
+    fn regex_lite_match(s: &str) -> bool {
+        if s.is_empty() || s.len() > 64 {
+            return false;
+        }
+        s.bytes().all(|b| {
+            b.is_ascii_alphanumeric() || b == b'_' || b == b'.' || b == b'-'
+        })
     }
 }
