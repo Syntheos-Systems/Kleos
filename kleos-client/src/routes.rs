@@ -4661,3 +4661,91 @@ pub static ROUTES: &[Route] = &[
         input_schema: r#"{"type":"object","additionalProperties":true}"#,
     },
 ];
+
+#[cfg(test)]
+/// Regression tests for `render_path`. Each test pins a specific behavior
+/// of the CWE-74/918 path-injection fix so future refactors cannot silently
+/// weaken the encoding contract.
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// Path-segment substitution must percent-encode `/`, `?`, `#`, and `%`
+    /// so an LLM-supplied argument cannot pivot the request to another route
+    /// or graft on a query/fragment. Regression coverage for CWE-74/918.
+    #[test]
+    fn render_path_blocks_injection_chars() {
+        let mut args = json!({ "id": "../admin?evil=1#frag" });
+        let out = render_path("/memory/{id}", &mut args).expect("render");
+        assert_eq!(out, "/memory/..%2Fadmin%3Fevil=1%23frag");
+        assert!(!out.contains("/admin"));
+        assert!(!out.contains('?'));
+        assert!(!out.contains('#'));
+    }
+
+    /// A literal `%` in the input must itself be encoded (`%` -> `%25`) so an
+    /// attacker cannot smuggle pre-encoded path traversal through the helper.
+    #[test]
+    fn render_path_double_encodes_percent() {
+        let mut args = json!({ "id": "%2Fadmin" });
+        let out = render_path("/memory/{id}", &mut args).expect("render");
+        assert_eq!(out, "/memory/%252Fadmin");
+    }
+
+    /// CR/LF and other control bytes must be encoded -- defends against
+    /// header-injection-via-URL if any downstream layer reflects the path.
+    #[test]
+    fn render_path_encodes_control_bytes() {
+        let mut args = json!({ "id": "a\r\nb" });
+        let out = render_path("/memory/{id}", &mut args).expect("render");
+        assert_eq!(out, "/memory/a%0D%0Ab");
+    }
+
+    /// Numbers and bools pass through as their literal scalar form -- they
+    /// cannot contain unsafe characters so encoding is unnecessary.
+    #[test]
+    fn render_path_passes_scalars_through() {
+        let mut args = json!({ "id": 42 });
+        assert_eq!(
+            render_path("/memory/{id}", &mut args).unwrap(),
+            "/memory/42"
+        );
+        let mut args = json!({ "flag": true });
+        assert_eq!(
+            render_path("/x/{flag}", &mut args).unwrap(),
+            "/x/true"
+        );
+    }
+
+    /// Arrays, objects, and null are not valid path-segment values and must
+    /// be rejected loudly rather than coerced via JSON serialization (which
+    /// would inject `{`, `}`, `[`, `]`, `,`, and `"` into the URL).
+    #[test]
+    fn render_path_rejects_non_scalar_values() {
+        let mut args = json!({ "id": ["a", "b"] });
+        assert!(render_path("/memory/{id}", &mut args).is_err());
+        let mut args = json!({ "id": { "nested": true } });
+        assert!(render_path("/memory/{id}", &mut args).is_err());
+        let mut args = json!({ "id": null });
+        assert!(render_path("/memory/{id}", &mut args).is_err());
+    }
+
+    /// The consumed key must be removed from args so the dispatcher does not
+    /// re-emit it in the request body (where it would shadow the path value).
+    #[test]
+    fn render_path_consumes_used_keys() {
+        let mut args = json!({ "id": "abc", "extra": "kept" });
+        render_path("/memory/{id}", &mut args).unwrap();
+        let obj = args.as_object().unwrap();
+        assert!(!obj.contains_key("id"));
+        assert!(obj.contains_key("extra"));
+    }
+
+    /// A missing required template key is a hard error -- silent omission
+    /// would produce a malformed URL that could collide with another route.
+    #[test]
+    fn render_path_errors_on_missing_key() {
+        let mut args = json!({});
+        assert!(render_path("/memory/{id}", &mut args).is_err());
+    }
+}
