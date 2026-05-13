@@ -26,7 +26,7 @@ fn edge_weight(link_type: &str, similarity: f64) -> f64 {
 #[tracing::instrument(skip(db))]
 pub async fn detect_communities(
     db: &Database,
-    user_id: i64,
+    _user_id: i64,
     max_iterations: u32,
 ) -> Result<CommunitiesResult> {
     // SECURITY/DoS: Louvain modularity optimization runs O(n^2)-ish over the
@@ -43,12 +43,12 @@ pub async fn detect_communities(
             let mut stmt = conn
                 .prepare(
                     "SELECT id FROM memories \
-                     WHERE user_id = ?1 AND is_forgotten = 0 AND is_archived = 0 AND is_latest = 1 \
-                     ORDER BY importance DESC, id DESC LIMIT ?2",
+                     WHERE is_forgotten = 0 AND is_archived = 0 AND is_latest = 1 \
+                     ORDER BY importance DESC, id DESC LIMIT ?1",
                 )
                 .map_err(rusqlite_to_eng_error)?;
             let ids = stmt
-                .query_map(rusqlite::params![user_id, MAX_NODES], |row| row.get(0))
+                .query_map(rusqlite::params![MAX_NODES], |row| row.get(0))
                 .map_err(rusqlite_to_eng_error)?
                 .collect::<std::result::Result<Vec<i64>, _>>()
                 .map_err(rusqlite_to_eng_error)?;
@@ -79,13 +79,12 @@ pub async fn detect_communities(
                      FROM memory_links ml \
                      JOIN memories ms ON ms.id = ml.source_id \
                      JOIN memories mt ON mt.id = ml.target_id \
-                     WHERE ms.user_id = ?1 AND mt.user_id = ?1 \
-                       AND ms.is_forgotten = 0 AND mt.is_forgotten = 0 \
+                     WHERE ms.is_forgotten = 0 AND mt.is_forgotten = 0 \
                        AND ms.is_archived = 0 AND mt.is_archived = 0",
                 )
                 .map_err(rusqlite_to_eng_error)?;
             let rows = stmt
-                .query_map(rusqlite::params![user_id], |row| {
+                .query_map([], |row| {
                     Ok(EdgeRow {
                         source_id: row.get(0)?,
                         target_id: row.get(1)?,
@@ -250,7 +249,6 @@ pub async fn detect_communities(
         memories = memory_ids.len(),
         largest,
         isolated,
-        user_id,
         "communities_detected"
     );
     Ok(CommunitiesResult {
@@ -263,20 +261,20 @@ pub async fn detect_communities(
 pub async fn get_community_members(
     db: &Database,
     community_id: i64,
-    user_id: i64,
+    _user_id: i64,
     limit: usize,
 ) -> Result<Vec<CommunityMember>> {
     db.read(move |conn| {
         let mut stmt = conn
             .prepare(
                 "SELECT id, content, category, importance, created_at FROM memories \
-                 WHERE community_id = ?1 AND user_id = ?2 AND is_forgotten = 0 AND is_archived = 0 \
-                 ORDER BY importance DESC, created_at DESC LIMIT ?3",
+                 WHERE community_id = ?1 AND is_forgotten = 0 AND is_archived = 0 \
+                 ORDER BY importance DESC, created_at DESC LIMIT ?2",
             )
             .map_err(rusqlite_to_eng_error)?;
         let members = stmt
             .query_map(
-                rusqlite::params![community_id, user_id, limit as i64],
+                rusqlite::params![community_id, limit as i64],
                 |row| {
                     Ok(CommunityMember {
                         id: row.get(0)?,
@@ -296,7 +294,7 @@ pub async fn get_community_members(
 }
 
 #[tracing::instrument(skip(db))]
-pub async fn get_community_stats(db: &Database, user_id: i64) -> Result<Vec<CommunityStats>> {
+pub async fn get_community_stats(db: &Database, _user_id: i64) -> Result<Vec<CommunityStats>> {
     db.read(move |conn| {
         let mut stmt = conn
             .prepare(

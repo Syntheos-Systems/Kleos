@@ -190,7 +190,7 @@ pub async fn delete_entity(db: &Database, id: i64) -> Result<()> {
 pub async fn update_entity(
     db: &Database,
     id: i64,
-    user_id: i64,
+    _user_id: i64,
     name: Option<&str>,
     entity_type: Option<&str>,
     description: Option<&str>,
@@ -254,7 +254,7 @@ pub async fn update_entity(
 #[tracing::instrument(skip(db, req))]
 pub async fn create_relationship(
     db: &Database,
-    user_id: i64,
+    _user_id: i64,
     req: CreateRelationshipRequest,
 ) -> Result<EntityRelationship> {
     // SECURITY: verify both endpoints belong to the caller before writing so a
@@ -338,7 +338,7 @@ pub use crate::validation::MAX_ENTITY_RELATIONSHIPS;
 pub async fn get_entity_relationships(
     db: &Database,
     entity_id: i64,
-    user_id: i64,
+    _user_id: i64,
 ) -> Result<Vec<EntityRelationship>> {
     db.read(move |conn| {
         let mut stmt = conn
@@ -382,7 +382,7 @@ pub async fn link_memory_entity(
     db: &Database,
     memory_id: i64,
     entity_id: i64,
-    user_id: i64,
+    _user_id: i64,
     salience: f64,
 ) -> Result<()> {
     let count: i64 = db
@@ -429,7 +429,7 @@ pub async fn unlink_memory_entity(
     db: &Database,
     memory_id: i64,
     entity_id: i64,
-    user_id: i64,
+    _user_id: i64,
 ) -> Result<()> {
     db.write(move |conn| {
         let affected = conn
@@ -457,14 +457,14 @@ pub async fn unlink_memory_entity(
 pub async fn get_memory_entities(
     db: &Database,
     memory_id: i64,
-    user_id: i64,
+    _user_id: i64,
 ) -> Result<Vec<Entity>> {
     let query = format!(
         "SELECT e.{cols} \
          FROM entities e \
          JOIN memory_entities me ON me.entity_id = e.id \
          JOIN memories m ON m.id = me.memory_id \
-         WHERE me.memory_id = ?1 AND m.user_id = ?2 \
+         WHERE me.memory_id = ?1 \
          ORDER BY me.salience DESC",
         cols = ENTITY_COLUMNS
             .split(", ")
@@ -476,7 +476,7 @@ pub async fn get_memory_entities(
     db.read(move |conn| {
         let mut stmt = conn.prepare(&query).map_err(rusqlite_to_eng_error)?;
         let mut rows = stmt
-            .query(rusqlite::params![memory_id, user_id])
+            .query(rusqlite::params![memory_id])
             .map_err(rusqlite_to_eng_error)?;
         let mut entities = Vec::new();
         while let Some(row) = rows.next().map_err(rusqlite_to_eng_error)? {
@@ -517,7 +517,7 @@ pub async fn get_entity_memories(db: &Database, entity_id: i64) -> Result<Vec<i6
 pub async fn search_entity_memories(
     db: &Database,
     entity_id: i64,
-    user_id: i64,
+    _user_id: i64,
     query: &str,
     limit: i64,
 ) -> Result<Vec<EntityMemorySearchResult>> {
@@ -533,15 +533,15 @@ pub async fn search_entity_memories(
                 "SELECT m.id, m.content, m.category, m.source, m.importance, m.created_at \
                  FROM memories m \
                  JOIN memory_entities me ON me.memory_id = m.id \
-                 WHERE me.entity_id = ?1 AND m.user_id = ?2 AND m.is_forgotten = 0 \
+                 WHERE me.entity_id = ?1 AND m.is_forgotten = 0 \
                    AND m.is_archived = 0 AND m.is_latest = 1 \
-                   AND m.id IN (SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?3) \
+                   AND m.id IN (SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?2) \
                  ORDER BY m.importance DESC, m.created_at DESC \
-                 LIMIT ?4",
+                 LIMIT ?3",
             )
             .map_err(rusqlite_to_eng_error)?;
         let mut rows = stmt
-            .query(rusqlite::params![entity_id, user_id, sanitized, limit])
+            .query(rusqlite::params![entity_id, sanitized, limit])
             .map_err(rusqlite_to_eng_error)?;
         let mut results = Vec::new();
         while let Some(row) = rows.next().map_err(rusqlite_to_eng_error)? {
@@ -564,7 +564,7 @@ pub async fn delete_relationship(
     db: &Database,
     entity_id: i64,
     target_entity_id: i64,
-    user_id: i64,
+    _user_id: i64,
     relationship_type: Option<&str>,
 ) -> Result<()> {
     let mut params: Vec<rusqlite::types::Value> = vec![entity_id.into(), target_entity_id.into()];
