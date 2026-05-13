@@ -499,7 +499,7 @@ async fn sentiment_analyze_handler(
 
 #[tracing::instrument(skip_all)]
 async fn sentiment_history_handler(
-    Auth(auth): Auth,
+    Auth(_auth): Auth,
     ResolvedDb(db): ResolvedDb,
     Query(params): Query<SentimentHistoryQuery>,
 ) -> Result<Json<Value>, AppError> {
@@ -512,12 +512,12 @@ async fn sentiment_history_handler(
             let mut stmt = conn
                 .prepare(
                     "SELECT id, content, created_at FROM memories \
-                     WHERE user_id = ?1 AND is_forgotten = 0 AND created_at >= ?2 \
-                     ORDER BY created_at DESC LIMIT ?3",
+                     WHERE is_forgotten = 0 AND created_at >= ?1 \
+                     ORDER BY created_at DESC LIMIT ?2",
                 )
                 .map_err(kleos_lib::EngError::Database)?;
             let rows = stmt
-                .query_map(params![auth.user_id, since_owned, limit], |row| {
+                .query_map(params![since_owned, limit], |row| {
                     let id: i64 = row.get(0)?;
                     let content: String = row.get(1)?;
                     let created_at: String = row.get(2)?;

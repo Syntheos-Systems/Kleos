@@ -199,7 +199,7 @@ pub async fn store_valence(db: &Database, memory_id: i64, content: &str) -> Resu
 pub async fn query_by_emotion(
     db: &Database,
     emotion: &str,
-    user_id: i64,
+    _user_id: i64,
     limit: i64,
 ) -> Result<Vec<EmotionMemory>> {
     let emotion_owned = emotion.to_string();
@@ -208,12 +208,12 @@ pub async fn query_by_emotion(
             .prepare(
                 "SELECT id, content, category, importance, valence, arousal, dominant_emotion, created_at \
                  FROM memories \
-                 WHERE user_id = ?1 AND dominant_emotion = ?2 AND is_forgotten = 0 AND is_archived = 0 \
-                 ORDER BY ABS(valence) DESC, created_at DESC LIMIT ?3",
+                 WHERE dominant_emotion = ?1 AND is_forgotten = 0 AND is_archived = 0 \
+                 ORDER BY ABS(valence) DESC, created_at DESC LIMIT ?2",
             )
             .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
         let rows = stmt
-            .query_map(params![user_id, emotion_owned, limit], |row| {
+            .query_map(params![emotion_owned, limit], |row| {
                 Ok(EmotionMemory {
                     id: row.get(0)?,
                     content: row.get(1)?,

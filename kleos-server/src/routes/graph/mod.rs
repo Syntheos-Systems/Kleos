@@ -671,7 +671,7 @@ async fn memory_entities_handler(
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
     // SECURITY/DoS: cap entity fan-out per memory to avoid unbounded result sets.
-    let user_id = auth.user_id;
+    let _user_id = auth.user_id;
 
     let entities = db
         .read(move |conn| {
@@ -681,14 +681,14 @@ async fn memory_entities_handler(
                      FROM memory_entities me \
                      JOIN entities e ON e.id = me.entity_id \
                      JOIN memories m ON m.id = me.memory_id \
-                     WHERE me.memory_id = ?1 AND m.user_id = ?2 \
+                     WHERE me.memory_id = ?1 \
                      ORDER BY me.salience DESC \
-                     LIMIT ?3",
+                     LIMIT ?2",
                 )
                 .map_err(kleos_lib::EngError::Database)?;
 
             let rows = stmt
-                .query_map(params![id, user_id, MAX_MEMORY_ENTITY_FANOUT], |row| {
+                .query_map(params![id, MAX_MEMORY_ENTITY_FANOUT], |row| {
                     let eid: i64 = row.get(0)?;
                     let name: String = row.get(1)?;
                     let entity_type: String = row.get(2)?;

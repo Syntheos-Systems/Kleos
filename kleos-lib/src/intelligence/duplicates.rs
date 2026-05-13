@@ -13,7 +13,7 @@ fn rusqlite_to_eng_error(err: rusqlite::Error) -> EngError {
 #[tracing::instrument(skip(db))]
 pub async fn find_duplicates(
     db: &Database,
-    user_id: i64,
+    _user_id: i64,
     threshold: f64,
     limit: i64,
 ) -> Result<Vec<DuplicatePair>> {
@@ -27,16 +27,15 @@ pub async fn find_duplicates(
                  JOIN memories mt ON mt.id = ml.target_id \
                  WHERE ml.similarity >= ?1 \
                    AND ml.type = 'similarity' \
-                   AND ms.user_id = ?2 AND mt.user_id = ?2 \
                    AND ms.is_forgotten = 0 AND mt.is_forgotten = 0 \
                    AND ms.is_superseded = 0 AND mt.is_superseded = 0 \
                  ORDER BY ml.similarity DESC \
-                 LIMIT ?3",
+                 LIMIT ?2",
             )
             .map_err(rusqlite_to_eng_error)?;
 
         let pairs = stmt
-            .query_map(rusqlite::params![threshold, user_id, limit], |row| {
+            .query_map(rusqlite::params![threshold, limit], |row| {
                 Ok(DuplicatePair {
                     id_a: row.get(0)?,
                     id_b: row.get(1)?,
@@ -96,8 +95,8 @@ pub async fn deduplicate(
                 let n = conn
                     .execute(
                         "UPDATE memories SET is_superseded = 1, updated_at = datetime('now') \
-                         WHERE id = ?1 AND user_id = ?2 AND is_superseded = 0",
-                        rusqlite::params![supersede_id, user_id],
+                         WHERE id = ?1 AND is_superseded = 0",
+                        rusqlite::params![supersede_id],
                     )
                     .map_err(rusqlite_to_eng_error)?;
                 Ok(n)

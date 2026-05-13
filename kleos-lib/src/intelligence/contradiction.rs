@@ -29,11 +29,11 @@ pub async fn detect_contradictions(db: &Database, memory: &Memory) -> Result<Vec
                 .prepare(
                     "SELECT id, subject, predicate, object, confidence \
                      FROM structured_facts \
-                     WHERE memory_id = ?1 AND user_id = ?2",
+                     WHERE memory_id = ?1",
                 )
                 .map_err(rusqlite_to_eng_error)?;
             let rows = stmt
-                .query_map(params![memory_id, user_id], |row| {
+                .query_map(params![memory_id], |row| {
                     Ok((
                         row.get::<_, i64>(0)?,
                         row.get::<_, String>(1)?,
@@ -64,16 +64,15 @@ pub async fn detect_contradictions(db: &Database, memory: &Memory) -> Result<Vec
                     .prepare(
                         "SELECT sf.id, sf.object, sf.memory_id, sf.confidence \
                          FROM structured_facts sf \
-                         WHERE sf.user_id = ?1 \
-                           AND sf.subject = ?2 AND sf.predicate = ?3 \
-                           AND sf.memory_id != ?4 \
-                           AND sf.id != ?5 \
+                         WHERE sf.subject = ?1 AND sf.predicate = ?2 \
+                           AND sf.memory_id != ?3 \
+                           AND sf.id != ?4 \
                          ORDER BY sf.confidence DESC",
                     )
                     .map_err(rusqlite_to_eng_error)?;
                 let rows = stmt
                     .query_map(
-                        params![user_id, subject_c, predicate_c, memory_id, nfid],
+                        params![subject_c, predicate_c, memory_id, nfid],
                         |row| {
                             Ok((
                                 row.get::<_, i64>(0)?,

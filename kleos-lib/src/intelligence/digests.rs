@@ -5,7 +5,7 @@ use rusqlite::params;
 
 /// Generate a digest summarizing recent memory activity.
 #[tracing::instrument(skip(db))]
-pub async fn generate_digest(db: &Database, user_id: i64, period: &str) -> Result<Digest> {
+pub async fn generate_digest(db: &Database, _user_id: i64, period: &str) -> Result<Digest> {
     let interval = match period {
         "daily" => "-1 day",
         "weekly" => "-7 days",
@@ -22,12 +22,12 @@ pub async fn generate_digest(db: &Database, user_id: i64, period: &str) -> Resul
             let mut stmt = conn
                 .prepare(
                     "SELECT id, content, category, importance FROM memories \
-                     WHERE user_id = ?1 AND is_forgotten = 0 AND created_at >= datetime('now', ?2) \
+                     WHERE is_forgotten = 0 AND created_at >= datetime('now', ?1) \
                      ORDER BY importance DESC LIMIT 50",
                 )
                 .map_err(|e| EngError::DatabaseMessage(e.to_string()))?;
             let rows = stmt
-                .query_map(params![user_id, interval_owned], |row| {
+                .query_map(params![interval_owned], |row| {
                     let content: String = row.get(1)?;
                     let category: String = row.get(2)?;
                     let importance: i32 = row.get(3)?;
@@ -87,7 +87,7 @@ pub async fn generate_digest(db: &Database, user_id: i64, period: &str) -> Resul
         period: period_owned,
         content: digest_content,
         memory_count: count,
-        user_id,
+        user_id: 0,
         started_at: None,
         ended_at: None,
         created_at: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string(),

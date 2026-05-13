@@ -110,16 +110,11 @@ pub async fn query_actions(
     action: Option<&str>,
     limit: usize,
     offset: usize,
-    user_id: i64,
+    _user_id: i64,
 ) -> Result<Vec<ActionEntry>> {
-    // H-R3-006: previously this took _user_id and ignored it; broca_actions
-    // had no user_id column, so any caller could read any tenant's rows.
-    // After tenant migration v42 + monolith migration v45 the column exists
-    // and we filter on it.
-    let mut sql = format!("SELECT {ACTION_COLUMNS} FROM broca_actions WHERE user_id = ?1");
-    let mut params_vec: Vec<rusqlite::types::Value> =
-        vec![rusqlite::types::Value::Integer(user_id)];
-    let mut param_idx = 2usize;
+    let mut sql = format!("SELECT {ACTION_COLUMNS} FROM broca_actions WHERE 1=1");
+    let mut params_vec: Vec<rusqlite::types::Value> = Vec::new();
+    let mut param_idx = 1usize;
 
     if let Some(a) = agent {
         sql.push_str(&format!(" AND agent = ?{}", param_idx));
@@ -158,13 +153,13 @@ pub async fn query_actions(
 }
 
 #[tracing::instrument(skip(db), fields(action_id = id, user_id))]
-pub async fn get_action(db: &Database, id: i64, user_id: i64) -> Result<ActionEntry> {
-    let sql = format!("SELECT {ACTION_COLUMNS} FROM broca_actions WHERE id = ?1 AND user_id = ?2");
+pub async fn get_action(db: &Database, id: i64, _user_id: i64) -> Result<ActionEntry> {
+    let sql = format!("SELECT {ACTION_COLUMNS} FROM broca_actions WHERE id = ?1");
 
     db.read(move |conn| {
         let mut stmt = conn.prepare(&sql).map_err(rusqlite_to_eng_error)?;
         let mut rows = stmt
-            .query(rusqlite::params![id, user_id])
+            .query(rusqlite::params![id])
             .map_err(rusqlite_to_eng_error)?;
         let row = rows
             .next()
@@ -176,12 +171,12 @@ pub async fn get_action(db: &Database, id: i64, user_id: i64) -> Result<ActionEn
 }
 
 #[tracing::instrument(skip(db), fields(user_id))]
-pub async fn get_stats(db: &Database, user_id: i64) -> Result<BrocaStats> {
+pub async fn get_stats(db: &Database, _user_id: i64) -> Result<BrocaStats> {
     db.read(move |conn| {
         conn.query_row(
             "SELECT COUNT(*), COUNT(DISTINCT agent), COUNT(DISTINCT service)
-             FROM broca_actions WHERE user_id = ?1",
-            rusqlite::params![user_id],
+             FROM broca_actions",
+            [],
             |row| {
                 Ok(BrocaStats {
                     total_actions: row.get(0)?,

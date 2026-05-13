@@ -202,20 +202,20 @@ pub async fn get_episode_for_user(db: &Database, id: i64) -> Result<EpisodeRow> 
 pub async fn get_episode_memories(
     db: &Database,
     episode_id: i64,
-    user_id: i64,
+    _user_id: i64,
 ) -> Result<Vec<serde_json::Value>> {
     db.read(move |conn| {
         let mut stmt = conn
             .prepare(
                 "SELECT id, content, category, source, importance, created_at
                  FROM memories
-                 WHERE episode_id = ?1 AND user_id = ?2 AND is_forgotten = 0
+                 WHERE episode_id = ?1 AND is_forgotten = 0
                  ORDER BY created_at DESC",
             )
             .map_err(rusqlite_to_eng_error)?;
 
         let rows = stmt
-            .query_map(params![episode_id, user_id], |row| {
+            .query_map(params![episode_id], |row| {
                 let id: i64 = row.get(0)?;
                 let content: String = row.get(1)?;
                 let category: String = row.get(2)?;

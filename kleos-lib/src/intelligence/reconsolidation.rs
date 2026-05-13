@@ -180,8 +180,8 @@ pub async fn reconsolidate_memory(
         db.write(move |conn| {
             conn.execute(
                 "UPDATE memories SET importance = ?1, confidence = ?2, updated_at = datetime('now') \
-                 WHERE id = ?3 AND user_id = ?4",
-                rusqlite::params![new_importance, new_confidence, memory_id, user_id],
+                 WHERE id = ?3",
+                rusqlite::params![new_importance, new_confidence, memory_id],
             )
             .map_err(rusqlite_to_eng_error)?;
 
@@ -247,15 +247,15 @@ pub async fn run_reconsolidation_sweep(
             let mut stmt = conn
                 .prepare(
                     "SELECT id FROM memories \
-                     WHERE user_id = ?1 AND is_forgotten = 0 AND is_latest = 1 \
+                     WHERE is_forgotten = 0 AND is_latest = 1 \
                        AND (recall_hits + recall_misses > 0 \
                             OR (access_count < 3 AND created_at < datetime('now', '-7 days'))) \
                      ORDER BY updated_at ASC \
-                     LIMIT ?2",
+                     LIMIT ?1",
                 )
                 .map_err(rusqlite_to_eng_error)?;
             let mut rows = stmt
-                .query(rusqlite::params![user_id, batch_size as i64])
+                .query(rusqlite::params![batch_size as i64])
                 .map_err(rusqlite_to_eng_error)?;
             let mut ids = Vec::new();
             while let Some(row) = rows.next().map_err(rusqlite_to_eng_error)? {

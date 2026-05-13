@@ -127,8 +127,8 @@ pub async fn consolidate(db: &Database, memory_ids: &[String], user_id: i64) -> 
                 .map_err(rusqlite_to_eng_error)?;
                 tx.execute(
                     "UPDATE memories SET is_consolidated = 1, updated_at = datetime('now') \
-                     WHERE id = ?1 AND user_id = ?2",
-                    rusqlite::params![source_id, user_id],
+                     WHERE id = ?1",
+                    rusqlite::params![source_id],
                 )
                 .map_err(rusqlite_to_eng_error)?;
             }
@@ -193,7 +193,7 @@ pub async fn consolidate(db: &Database, memory_ids: &[String], user_id: i64) -> 
 pub async fn find_consolidation_candidates(
     db: &Database,
     threshold: f32,
-    user_id: i64,
+    _user_id: i64,
 ) -> Result<Vec<Vec<String>>> {
     // Collect all similar pairs from the database.
     let pairs: Vec<(i64, i64)> = db
@@ -205,7 +205,6 @@ pub async fn find_consolidation_candidates(
                      JOIN memories ms ON ms.id = ml.source_id \
                      JOIN memories mt ON mt.id = ml.target_id \
                      WHERE ml.similarity >= ?1 \
-                       AND ms.user_id = ?2 AND mt.user_id = ?2 \
                        AND ml.type IN ('similarity', 'related', 'cite') \
                        AND ms.is_forgotten = 0 AND mt.is_forgotten = 0 \
                        AND ms.is_latest = 1 AND mt.is_latest = 1 \
@@ -215,7 +214,7 @@ pub async fn find_consolidation_candidates(
                 )
                 .map_err(rusqlite_to_eng_error)?;
             let mut rows = stmt
-                .query(rusqlite::params![threshold as f64, user_id])
+                .query(rusqlite::params![threshold as f64])
                 .map_err(rusqlite_to_eng_error)?;
             let mut pairs = Vec::new();
             while let Some(row) = rows.next().map_err(rusqlite_to_eng_error)? {

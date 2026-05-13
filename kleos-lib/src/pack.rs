@@ -39,13 +39,13 @@ pub struct PackResult {
     pub utilization: String,
 }
 
-#[tracing::instrument(skip(db, _context), fields(token_budget, format = ?format, user_id))]
+#[tracing::instrument(skip(db, _context), fields(token_budget, format = ?format))]
 pub async fn pack_memories(
     db: &Database,
     _context: &str,
     token_budget: usize,
     format: PackFormat,
-    user_id: i64,
+    _user_id: i64,
 ) -> Result<PackResult> {
     // Layer 1: Static facts
     let static_candidates: Vec<PackCandidate> = db
@@ -55,11 +55,11 @@ pub async fn pack_memories(
                     "SELECT id, content, category, importance \
                      FROM memories \
                      WHERE is_static = 1 AND is_forgotten = 0 AND is_archived = 0 \
-                       AND is_consolidated = 0 AND user_id = ?1",
+                       AND is_consolidated = 0",
                 )
                 .map_err(rusqlite_to_eng_error)?;
             let rows = stmt
-                .query_map(rusqlite::params![user_id], |row| {
+                .query_map(rusqlite::params![], |row| {
                     Ok(PackCandidate {
                         id: row.get(0)?,
                         content: row.get(1)?,
@@ -87,12 +87,12 @@ pub async fn pack_memories(
                             COALESCE(decay_score, importance) as ds \
                      FROM memories \
                      WHERE is_forgotten = 0 AND is_archived = 0 AND is_latest = 1 \
-                       AND is_consolidated = 0 AND user_id = ?1 \
+                       AND is_consolidated = 0 \
                      ORDER BY ds DESC LIMIT 30",
                 )
                 .map_err(rusqlite_to_eng_error)?;
             let rows = stmt
-                .query_map(rusqlite::params![user_id], |row| {
+                .query_map(rusqlite::params![], |row| {
                     let ds: f64 = row.get::<_, f64>(4).unwrap_or(5.0);
                     Ok(PackCandidate {
                         id: row.get(0)?,

@@ -78,12 +78,12 @@ pub async fn predictive_recall(db: &Database, user_id: i64) -> Result<Predictive
             let mut stmt = conn
                 .prepare(
                     "SELECT description FROM temporal_patterns \
-                     WHERE user_id = ?1 AND description LIKE ?2 \
+                     WHERE description LIKE ?1 \
                      ORDER BY created_at DESC LIMIT 20",
                 )
                 .map_err(rusqlite_to_eng_error)?;
             let rows = stmt
-                .query_map(params![user_id, pattern_query], |row| {
+                .query_map(params![pattern_query], |row| {
                     row.get::<_, String>(0)
                 })
                 .map_err(rusqlite_to_eng_error)?;

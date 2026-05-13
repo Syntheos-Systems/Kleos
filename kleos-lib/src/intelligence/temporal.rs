@@ -251,7 +251,7 @@ pub async fn detect_fact_contradictions(
     verb: &str,
     object: Option<&str>,
     quantity: Option<f64>,
-    user_id: i64,
+    _user_id: i64,
 ) -> Result<Vec<FactContradiction>> {
     let subject = subject.to_string();
     let verb = verb.to_string();
@@ -278,8 +278,7 @@ pub async fn detect_fact_contradictions(
                      FROM structured_facts
                      WHERE subject = ?1 COLLATE NOCASE
                        AND verb = ?2 COLLATE NOCASE
-                       AND user_id = ?3
-                       AND id != ?4
+                       AND id != ?3
                        AND invalid_at IS NULL
                      ORDER BY created_at DESC
                      LIMIT 20",
@@ -287,7 +286,7 @@ pub async fn detect_fact_contradictions(
                 .map_err(rusqlite_to_eng_error)?;
 
             let rows = stmt
-                .query_map(params![subject_c, verb_c, user_id, new_fact_id], |row| {
+                .query_map(params![subject_c, verb_c, new_fact_id], |row| {
                     Ok(CandidateRow {
                         old_id: row.get(0)?,
                         old_memory_id: row.get(1)?,
@@ -554,7 +553,7 @@ pub async fn backfill_fact_validity(db: &Database, user_id: i64) -> Result<i32> 
 #[tracing::instrument(skip(db, query, timestamp))]
 pub async fn time_travel(
     db: &Database,
-    user_id: i64,
+    _user_id: i64,
     query: Option<&str>,
     timestamp: &str,
     limit: i64,
@@ -568,14 +567,14 @@ pub async fn time_travel(
                 .prepare(
                     "SELECT id, content, category, importance, created_at \
                      FROM memories \
-                     WHERE user_id = ?1 AND created_at <= ?2 AND is_forgotten = 0 \
-                       AND content LIKE ?3 \
-                     ORDER BY created_at DESC LIMIT ?4",
+                     WHERE created_at <= ?1 AND is_forgotten = 0 \
+                       AND content LIKE ?2 \
+                     ORDER BY created_at DESC LIMIT ?3",
                 )
                 .map_err(rusqlite_to_eng_error)?;
 
             let rows = stmt
-                .query_map(params![user_id, timestamp, pattern, limit], |row| {
+                .query_map(params![timestamp, pattern, limit], |row| {
                     Ok(TimeTravelResult {
                         id: row.get(0)?,
                         content: row.get(1)?,
@@ -596,13 +595,13 @@ pub async fn time_travel(
                 .prepare(
                     "SELECT id, content, category, importance, created_at \
                      FROM memories \
-                     WHERE user_id = ?1 AND created_at <= ?2 AND is_forgotten = 0 \
-                     ORDER BY created_at DESC LIMIT ?3",
+                     WHERE created_at <= ?1 AND is_forgotten = 0 \
+                     ORDER BY created_at DESC LIMIT ?2",
                 )
                 .map_err(rusqlite_to_eng_error)?;
 
             let rows = stmt
-                .query_map(params![user_id, timestamp, limit], |row| {
+                .query_map(params![timestamp, limit], |row| {
                     Ok(TimeTravelResult {
                         id: row.get(0)?,
                         content: row.get(1)?,

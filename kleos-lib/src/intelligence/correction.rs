@@ -54,8 +54,8 @@ pub async fn correct_memory(
     db.write(move |conn| {
         conn.execute(
             "UPDATE memories SET is_superseded = 1, updated_at = datetime('now') \
-             WHERE id = ?1 AND user_id = ?2",
-            rusqlite::params![memory_id, user_id],
+             WHERE id = ?1",
+            rusqlite::params![memory_id],
         )
         .map_err(rusqlite_to_eng_error)?;
         Ok(())
