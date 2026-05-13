@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `render_path` now percent-encodes path-segment substitutions (CWE-74 / CWE-918): an MCP client cannot pivot the URL to another route via `/`, `?`, `#`, or `%` in a string argument; non-scalar (array/object/null) path args are rejected outright. Regression coverage added in `kleos-client/src/routes.rs` tests
 - `get_with_timeout` / `post_with_timeout` in `kleos-client`: `reqwest::ClientBuilder::build().unwrap_or_default()` silently disarmed the per-call timeout on builder failure; builder errors now propagate
+- Drop `gui.serve_app_assets` from the route registry: the axum wildcard template `/_app/{*path}` produced the property key `*path` in the tool input schema, which fails Anthropic's MCP regex `^[a-zA-Z0-9_.-]{1,64}$` and rejected the entire 485-tool list. Tool count is 484. New `registry_property_keys_match_mcp_regex` test prevents regression
 
 ### Security
 
