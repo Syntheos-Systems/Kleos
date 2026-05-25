@@ -42,6 +42,7 @@ LABEL org.opencontainers.image.source="https://github.com/Ghost-Frame/Kleos" \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 \
     ca-certificates \
+    libpcsclite1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a dedicated non-root user for running the server.
