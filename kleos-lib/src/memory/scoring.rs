@@ -30,6 +30,41 @@ pub const DEFAULT_VECTOR_FLOOR: f64 = 0.15;
 pub const RRF_K: f64 = 60.0;
 pub const RECENCY_WEIGHT: f64 = 0.15;
 
+/// Extra classifier keywords loaded once from env vars at first use.
+/// Each var is a comma-separated list of lowercase phrases that are
+/// merged with the built-in keyword arrays inside `classify_question_mixed`.
+///
+/// Env vars (all optional, additive — never replace the built-ins):
+///   KLEOS_CLASSIFIER_TEMPORAL_EXTRA
+///   KLEOS_CLASSIFIER_PREFERENCE_EXTRA
+///   KLEOS_CLASSIFIER_REASONING_EXTRA
+///   KLEOS_CLASSIFIER_FACTRECALL_EXTRA
+///   KLEOS_CLASSIFIER_GENERALIZATION_EXTRA
+static EXTRA_CLASSIFIER_KEYWORDS: LazyLock<HashMap<QuestionType, Vec<String>>> =
+    LazyLock::new(|| {
+        let defs = [
+            (QuestionType::Temporal,       "KLEOS_CLASSIFIER_TEMPORAL_EXTRA"),
+            (QuestionType::Preference,     "KLEOS_CLASSIFIER_PREFERENCE_EXTRA"),
+            (QuestionType::Reasoning,      "KLEOS_CLASSIFIER_REASONING_EXTRA"),
+            (QuestionType::FactRecall,     "KLEOS_CLASSIFIER_FACTRECALL_EXTRA"),
+            (QuestionType::Generalization, "KLEOS_CLASSIFIER_GENERALIZATION_EXTRA"),
+        ];
+        let mut map = HashMap::new();
+        for (qt, var) in defs {
+            if let Ok(v) = std::env::var(var) {
+                let kws: Vec<String> = v
+                    .split(',')
+                    .map(|s| s.trim().to_lowercase())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                if !kws.is_empty() {
+                    map.insert(qt, kws);
+                }
+            }
+        }
+        map
+    });
+
 pub fn question_strategy(qt: QuestionType) -> SearchStrategy {
     match qt {
         QuestionType::FactRecall => SearchStrategy {
@@ -117,10 +152,12 @@ fn contains_any(haystack: &str, needles: &[&str]) -> bool {
 pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
     let q = query.to_lowercase();
     let mut scores: HashMap<QuestionType, f64> = HashMap::new();
-    if contains_any(&q, &["when did", "when was", "timeline", "history of"]) {
+    if contains_any(&q, &["when did", "when was", "timeline", "history of",
+                          "wann war", "wann hat", "zeitverlauf", "geschichte von"]) {
         *scores.entry(QuestionType::Temporal).or_default() += 0.6;
     }
-    if contains_any(&q, &["over the past", "how long ago", "since when"]) {
+    if contains_any(&q, &["over the past", "how long ago", "since when",
+                          "seit wann", "wie lange", "im laufe"]) {
         *scores.entry(QuestionType::Temporal).or_default() += 0.4;
     }
     if contains_any(
@@ -131,6 +168,12 @@ pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
             "evolution of",
             "over time",
             "progression",
+            "früher",
+            "ursprünglich",
+            "entwicklung von",
+            "über die zeit",
+            "im laufe der zeit",
+            "wie hat sich",
         ],
     ) {
         *scores.entry(QuestionType::Temporal).or_default() += 0.5;
@@ -143,12 +186,8 @@ pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
     if contains_any(
         &q,
         &[
-            "recently",
-            "attended",
-            "joined",
-            "last time",
-            "went to",
-            "visited",
+            "recently", "attended", "joined", "last time", "went to", "visited",
+            "zuletzt", "besucht", "teilgenommen",
         ],
     ) {
         *scores.entry(QuestionType::FactRecall).or_default() += 0.5;
@@ -156,35 +195,32 @@ pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
     if contains_any(
         &q,
         &[
-            "what is my",
-            "what are my",
-            "tell me about",
-            "do i have",
-            "do i own",
+            "what is my", "what are my", "tell me about", "do i have", "do i own",
+            "was ist mein", "was sind meine", "erzähl mir", "habe ich", "besitze ich",
         ],
     ) {
         *scores.entry(QuestionType::FactRecall).or_default() += 0.5;
     }
     if contains_any(
         &q,
-        &["what did i", "where do", "where did", "who is", "who was"],
+        &[
+            "what did i", "where do", "where did", "who is", "who was",
+            "was habe ich", "wo ist", "wo war", "wer ist", "wer war",
+        ],
     ) {
         *scores.entry(QuestionType::FactRecall).or_default() += 0.4;
     }
     if contains_any(
         &q,
         &[
-            "why did",
-            "what made",
-            "decided",
-            "reason",
-            "because",
-            "why do",
+            "why did", "what made", "decided", "reason", "because", "why do",
+            "warum", "weshalb", "wieso", "grund", "weil", "entschieden",
         ],
     ) {
         *scores.entry(QuestionType::Reasoning).or_default() += 0.6;
     }
-    if contains_any(&q, &["motivation", "what led", "tradeoff", "trade-off"]) {
+    if contains_any(&q, &["motivation", "what led", "tradeoff", "trade-off",
+                          "motivation", "was hat dazu geführt", "abwägung"]) {
         *scores.entry(QuestionType::Reasoning).or_default() += 0.4;
     }
     if contains_any(
@@ -211,24 +247,30 @@ pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
     if contains_any(
         &q,
         &[
-            "favorite",
-            "prefer",
-            "like most",
-            "enjoy",
-            "love",
-            "hate",
-            "dislike",
-            "interested in",
-            "passionate about",
+            "favorite", "prefer", "like most", "enjoy", "love", "hate",
+            "dislike", "interested in", "passionate about",
+            "lieblings", "bevorzuge", "am liebsten", "genieße", "liebe",
+            "mag", "hasse", "interessiert", "begeistert", "geborgen",
         ],
     ) {
         *scores.entry(QuestionType::Preference).or_default() += 0.6;
     }
     if contains_any(
         &q,
-        &["what kind of", "what type of", "taste in", "style of"],
+        &[
+            "what kind of", "what type of", "taste in", "style of",
+            "welche art", "welcher typ", "geschmack", "gefühl",
+        ],
     ) {
         *scores.entry(QuestionType::Preference).or_default() += 0.4;
+    }
+
+    // Apply any extra keywords configured via env vars.
+    for (qt, kws) in EXTRA_CLASSIFIER_KEYWORDS.iter() {
+        let refs: Vec<&str> = kws.iter().map(|s| s.as_str()).collect();
+        if contains_any(&q, &refs) {
+            *scores.entry(*qt).or_default() += 0.5;
+        }
     }
 
     let total: f64 = scores.values().sum();
