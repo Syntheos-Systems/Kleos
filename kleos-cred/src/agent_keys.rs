@@ -48,6 +48,8 @@ pub struct AgentKeyPermissions {
     pub categories: Vec<String>,
     /// Whether raw access tier is allowed.
     pub allow_raw: bool,
+    /// Allowed namespace patterns (empty = all namespaces allowed).
+    pub namespaces: Vec<String>,
 }
 
 impl AgentKeyPermissions {
@@ -65,11 +67,32 @@ impl AgentKeyPermissions {
         })
     }
 
+    /// Check if this agent key is allowed to access a namespace.
+    ///
+    /// Empty namespaces list means all namespaces are allowed.
+    pub fn allows_namespace(&self, ns: &str) -> bool {
+        if self.namespaces.is_empty() {
+            return true;
+        }
+        self.namespaces.iter().any(|pattern| {
+            if pattern == "*" {
+                true
+            } else if let Some(prefix) = pattern.strip_suffix("/*") {
+                ns.starts_with(prefix)
+                    && ns.len() > prefix.len()
+                    && ns.as_bytes()[prefix.len()] == b'/'
+            } else {
+                pattern == ns
+            }
+        })
+    }
+
     /// Serialize to JSON for storage.
     pub fn to_json(&self) -> String {
         serde_json::json!({
             "categories": self.categories,
-            "allow_raw": self.allow_raw
+            "allow_raw": self.allow_raw,
+            "namespaces": self.namespaces,
         })
         .to_string()
     }
@@ -90,9 +113,19 @@ impl AgentKeyPermissions {
             .get("allow_raw")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        let namespaces = value
+            .get("namespaces")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
         Self {
             categories,
             allow_raw,
+            namespaces,
         }
     }
 }
@@ -168,13 +201,12 @@ pub async fn validate_agent_key(db: &Database, raw_key: &[u8]) -> Result<AgentKe
     let key = db
         .read(move |conn| {
             // Look up by hash (single-row scan) then verify with constant-time eq.
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, user_id, key_hash, name, permissions, created_at, revoked_at
+            let mut stmt = conn.prepare(
+                "SELECT id, user_id, key_hash, name, permissions, created_at, revoked_at
                      FROM cred_agent_keys
                      WHERE revoked_at IS NULL AND key_hash = ?1
                      LIMIT 1",
-                )?;
+            )?;
 
             let mut rows = stmt.query(rusqlite::params![key_hash])?;
 
@@ -218,13 +250,12 @@ pub async fn validate_agent_key(db: &Database, raw_key: &[u8]) -> Result<AgentKe
 #[tracing::instrument(skip(db), fields(user_id))]
 pub async fn list_agent_keys(db: &Database, user_id: i64) -> Result<Vec<AgentKey>> {
     db.read(move |conn| {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, user_id, key_hash, name, permissions, created_at, revoked_at
+        let mut stmt = conn.prepare(
+            "SELECT id, user_id, key_hash, name, permissions, created_at, revoked_at
                  FROM cred_agent_keys
                  WHERE user_id = ?1
                  ORDER BY created_at DESC",
-            )?;
+        )?;
 
         let rows = stmt.query_map(params![user_id], |row| {
             let id: i64 = row.get(0)?;
@@ -316,10 +347,12 @@ pub async fn delete_agent_key(db: &Database, user_id: i64, name: &str) -> Result
 mod tests {
     use super::*;
 
+    /// Build a test permissions struct with known categories, namespaces, and raw access.
     fn setup_permissions() -> AgentKeyPermissions {
         AgentKeyPermissions {
             categories: vec!["aws".into(), "gcp*".into()],
             allow_raw: true,
+            namespaces: vec!["prod".into(), "staging/*".into()],
         }
     }
 
@@ -352,6 +385,50 @@ mod tests {
         let restored = AgentKeyPermissions::from_json(&json);
         assert_eq!(perms.categories, restored.categories);
         assert_eq!(perms.allow_raw, restored.allow_raw);
+        assert_eq!(perms.namespaces, restored.namespaces);
+    }
+
+    #[test]
+    fn permissions_allows_namespace_exact() {
+        let perms = setup_permissions();
+        assert!(perms.allows_namespace("prod"));
+        assert!(!perms.allows_namespace("dev"));
+    }
+
+    #[test]
+    fn permissions_allows_namespace_prefix_wildcard() {
+        let perms = setup_permissions();
+        assert!(perms.allows_namespace("staging/feature-x"));
+        assert!(perms.allows_namespace("staging/main"));
+        assert!(!perms.allows_namespace("staging")); // prefix match requires content after /
+    }
+
+    #[test]
+    fn permissions_namespace_empty_allows_all() {
+        let perms = AgentKeyPermissions::default();
+        assert!(perms.allows_namespace("anything"));
+        assert!(perms.allows_namespace("prod"));
+    }
+
+    #[test]
+    fn permissions_namespace_star_allows_all() {
+        let perms = AgentKeyPermissions {
+            categories: vec![],
+            allow_raw: false,
+            namespaces: vec!["*".into()],
+        };
+        assert!(perms.allows_namespace("prod"));
+        assert!(perms.allows_namespace("dev"));
+        assert!(perms.allows_namespace("any-namespace"));
+    }
+
+    #[test]
+    fn permissions_json_backward_compat_missing_namespaces() {
+        // Old JSON without "namespaces" field should deserialize to empty vec (all allowed).
+        let json = r#"{"categories":["aws"],"allow_raw":false}"#;
+        let perms = AgentKeyPermissions::from_json(json);
+        assert!(perms.namespaces.is_empty());
+        assert!(perms.allows_namespace("any-namespace"));
     }
 
     #[test]

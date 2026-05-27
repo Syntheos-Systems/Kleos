@@ -45,7 +45,6 @@ fn get_pepper() -> Option<[u8; 32]> {
     })
 }
 
-
 // --- Scope ---
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -345,15 +344,13 @@ pub async fn create_key_with_expiry(
 
     let api_key = db
         .read(move |conn| {
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, user_id, key_prefix, name, scopes, rate_limit, is_active,
+            let mut stmt = conn.prepare(
+                "SELECT id, user_id, key_prefix, name, scopes, rate_limit, is_active,
                             agent_id, last_used_at, expires_at, created_at, hash_version
                      FROM api_keys
                      WHERE key_prefix = ?1 AND key_hash = ?2
                      LIMIT 1",
-                )
-                ?;
+            )?;
 
             let key = stmt
                 .query_row(
@@ -489,8 +486,7 @@ pub async fn validate_key(db: &Database, raw_key: &str) -> Result<AuthContext> {
             conn.execute(
                 "UPDATE api_keys SET last_used_at = datetime('now') WHERE id = ?1",
                 rusqlite::params![key_id],
-            )
-            ?;
+            )?;
             Ok(())
         })
         .await;
@@ -514,8 +510,7 @@ pub async fn revoke_key(db: &Database, user_id: i64, key_id: i64) -> Result<()> 
         conn.execute(
             "UPDATE api_keys SET is_active = 0 WHERE id = ?1 AND user_id = ?2",
             rusqlite::params![key_id, user_id],
-        )
-        ?;
+        )?;
         Ok(())
     })
     .await
@@ -528,8 +523,7 @@ pub async fn revoke_key_admin(db: &Database, key_id: i64) -> Result<()> {
         conn.execute(
             "UPDATE api_keys SET is_active = 0 WHERE id = ?1",
             rusqlite::params![key_id],
-        )
-        ?;
+        )?;
         Ok(())
     })
     .await
@@ -540,15 +534,13 @@ pub async fn revoke_key_admin(db: &Database, key_id: i64) -> Result<()> {
 pub async fn get_active_key_by_id(db: &Database, key_id: i64) -> Result<ApiKey> {
     let api_key = db
         .read(move |conn| {
-            let mut stmt = conn
-                .prepare(
-                    "SELECT id, user_id, key_prefix, name, scopes, rate_limit, is_active,
+            let mut stmt = conn.prepare(
+                "SELECT id, user_id, key_prefix, name, scopes, rate_limit, is_active,
                             agent_id, last_used_at, expires_at, created_at, hash_version
                      FROM api_keys
                      WHERE id = ?1 AND is_active = 1
                      LIMIT 1",
-                )
-                ?;
+            )?;
 
             let key = stmt
                 .query_row(rusqlite::params![key_id], row_to_api_key_rusqlite)
@@ -579,21 +571,18 @@ pub async fn get_active_key_by_id(db: &Database, key_id: i64) -> Result<ApiKey> 
 #[tracing::instrument(skip(db))]
 pub async fn list_keys(db: &Database, user_id: i64) -> Result<Vec<ApiKey>> {
     db.read(move |conn| {
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, user_id, key_prefix, name, scopes, rate_limit, is_active,
+        let mut stmt = conn.prepare(
+            "SELECT id, user_id, key_prefix, name, scopes, rate_limit, is_active,
                         agent_id, last_used_at, expires_at, created_at, hash_version
                  FROM api_keys
                  WHERE user_id = ?1 AND is_active = 1
                  ORDER BY created_at DESC",
-            )
-            ?;
+        )?;
 
         let keys = stmt
             .query_map(rusqlite::params![user_id], |row| {
                 row_to_api_key_rusqlite(row)
-            })
-            ?
+            })?
             .map(|r| r.map_err(EngError::from))
             .collect::<Result<Vec<ApiKey>>>()?;
 
