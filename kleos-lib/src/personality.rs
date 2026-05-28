@@ -1513,4 +1513,28 @@ mod tests {
         );
         assert!(profile.contains("2 signals"), "Should mention signal count");
     }
+
+    #[test]
+    fn detect_signals_returns_scores_for_emotional_content() {
+        let signals = detect_signals("I feel really excited about this project. I love building things.");
+        assert!(!signals.is_empty(), "Should detect signals in emotional content");
+        for (_, intensity) in &signals {
+            assert!(*intensity >= 0.0 && *intensity <= 1.0, "intensity must be in [0, 1]");
+        }
+    }
+
+    #[test]
+    fn detect_signals_empty_for_neutral_content() {
+        let signals = detect_signals("The server started on port 4200.");
+        assert!(signals.is_empty(), "Should not detect signals in neutral technical content");
+    }
+
+    #[test]
+    fn extra_emotion_keywords_env_var_is_additive() {
+        // Built-in keywords must always work regardless of env-var state.
+        // (LazyLock-based env-var loading cannot be reliably tested in parallel
+        // unit tests — covered by integration tests instead.)
+        let signals = detect_signals("I feel happy today.");
+        assert!(!signals.is_empty(), "Built-in emotion keywords must always be active");
+    }
 }

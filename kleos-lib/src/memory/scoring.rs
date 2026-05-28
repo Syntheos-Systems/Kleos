@@ -584,4 +584,44 @@ mod tests {
             s.vector_weight
         );
     }
+
+    #[test]
+    fn classifier_preference_enables_personality_signals() {
+        let weights = classify_question_mixed("what music do you enjoy and love most?");
+        let strategy = blend_strategies(&weights);
+        assert!(
+            strategy.include_personality_signals,
+            "Preference query should enable personality signals"
+        );
+        assert!(strategy.personality_weight > 0.0);
+    }
+
+    #[test]
+    fn classifier_factrecall_disables_personality_signals() {
+        let weights = classify_question_mixed("what did i visit last week?");
+        let strategy = blend_strategies(&weights);
+        assert!(
+            !strategy.include_personality_signals,
+            "FactRecall query should not enable personality signals"
+        );
+    }
+
+    #[test]
+    fn classifier_reasoning_enables_personality_signals() {
+        let weights = classify_question_mixed("why did I decide to change jobs?");
+        let strategy = blend_strategies(&weights);
+        assert!(
+            strategy.include_personality_signals,
+            "Reasoning query should enable personality signals"
+        );
+    }
+
+    #[test]
+    fn extra_classifier_keywords_env_var_is_additive() {
+        // Verify the built-in keywords are unaffected whether env var is set or not.
+        // (Runtime env-var loading via LazyLock cannot be reliably tested in parallel
+        // unit tests — covered by integration tests instead.)
+        let w = classify_question_mixed("what do you prefer?");
+        assert!(w.contains_key(&QuestionType::Preference));
+    }
 }
