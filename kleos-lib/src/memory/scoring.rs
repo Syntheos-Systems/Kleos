@@ -43,11 +43,20 @@ pub const RECENCY_WEIGHT: f64 = 0.15;
 static EXTRA_CLASSIFIER_KEYWORDS: LazyLock<HashMap<QuestionType, Vec<String>>> =
     LazyLock::new(|| {
         let defs = [
-            (QuestionType::Temporal,       "KLEOS_CLASSIFIER_TEMPORAL_EXTRA"),
-            (QuestionType::Preference,     "KLEOS_CLASSIFIER_PREFERENCE_EXTRA"),
-            (QuestionType::Reasoning,      "KLEOS_CLASSIFIER_REASONING_EXTRA"),
-            (QuestionType::FactRecall,     "KLEOS_CLASSIFIER_FACTRECALL_EXTRA"),
-            (QuestionType::Generalization, "KLEOS_CLASSIFIER_GENERALIZATION_EXTRA"),
+            (QuestionType::Temporal, "KLEOS_CLASSIFIER_TEMPORAL_EXTRA"),
+            (
+                QuestionType::Preference,
+                "KLEOS_CLASSIFIER_PREFERENCE_EXTRA",
+            ),
+            (QuestionType::Reasoning, "KLEOS_CLASSIFIER_REASONING_EXTRA"),
+            (
+                QuestionType::FactRecall,
+                "KLEOS_CLASSIFIER_FACTRECALL_EXTRA",
+            ),
+            (
+                QuestionType::Generalization,
+                "KLEOS_CLASSIFIER_GENERALIZATION_EXTRA",
+            ),
         ];
         let mut map = HashMap::new();
         for (qt, var) in defs {
@@ -177,13 +186,26 @@ pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
     }
     if contains_any(
         &q,
-        &["recently", "attended", "joined", "last time", "went to", "visited"],
+        &[
+            "recently",
+            "attended",
+            "joined",
+            "last time",
+            "went to",
+            "visited",
+        ],
     ) {
         *scores.entry(QuestionType::FactRecall).or_default() += 0.5;
     }
     if contains_any(
         &q,
-        &["what is my", "what are my", "tell me about", "do i have", "do i own"],
+        &[
+            "what is my",
+            "what are my",
+            "tell me about",
+            "do i have",
+            "do i own",
+        ],
     ) {
         *scores.entry(QuestionType::FactRecall).or_default() += 0.5;
     }
@@ -195,7 +217,14 @@ pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
     }
     if contains_any(
         &q,
-        &["why did", "what made", "decided", "reason", "because", "why do"],
+        &[
+            "why did",
+            "what made",
+            "decided",
+            "reason",
+            "because",
+            "why do",
+        ],
     ) {
         *scores.entry(QuestionType::Reasoning).or_default() += 0.6;
     }
@@ -226,8 +255,15 @@ pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
     if contains_any(
         &q,
         &[
-            "favorite", "prefer", "like most", "enjoy", "love", "hate",
-            "dislike", "interested in", "passionate about",
+            "favorite",
+            "prefer",
+            "like most",
+            "enjoy",
+            "love",
+            "hate",
+            "dislike",
+            "interested in",
+            "passionate about",
         ],
     ) {
         *scores.entry(QuestionType::Preference).or_default() += 0.6;

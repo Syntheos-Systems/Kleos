@@ -2,7 +2,6 @@ use super::fts::fts_search;
 use super::vector::{chunk_vector_search, vector_search};
 use super::{row_to_memory, MEMORY_COLUMNS};
 use crate::db::Database;
-use crate::personality;
 use crate::memory::scoring::{
     self, blend_strategies, classify_question_mixed, question_strategy, rrf_score,
 };
@@ -10,6 +9,7 @@ use crate::memory::types::{
     FacetBucket, FacetedSearchRequest, FacetedSearchResponse, LinkedMemory, QuestionType,
     SearchBudget, SearchRequest, SearchResult, TagCooccurrence, VersionChainEntry,
 };
+use crate::personality;
 use crate::validation::{DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, RERANKER_TOP_K};
 use crate::Result;
 use lru::LruCache;
@@ -858,8 +858,8 @@ pub async fn hybrid_search(db: &Database, req: SearchRequest) -> Result<Arc<Vec<
         if strategy.include_personality_signals && !c.content.is_empty() {
             let signals = personality::detect_signals(&c.content);
             if !signals.is_empty() {
-                let avg_intensity = signals.iter().map(|(_, v)| v).sum::<f64>()
-                    / signals.len() as f64;
+                let avg_intensity =
+                    signals.iter().map(|(_, v)| v).sum::<f64>() / signals.len() as f64;
                 let clamped = avg_intensity.clamp(0.0, 1.0);
                 c.personality_signal_score = Some((clamped * 1000.0).round() / 1000.0);
                 c.combined_score *= 1.0 + clamped * strategy.personality_weight;
