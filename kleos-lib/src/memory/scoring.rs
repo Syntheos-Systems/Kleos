@@ -152,12 +152,10 @@ fn contains_any(haystack: &str, needles: &[&str]) -> bool {
 pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
     let q = query.to_lowercase();
     let mut scores: HashMap<QuestionType, f64> = HashMap::new();
-    if contains_any(&q, &["when did", "when was", "timeline", "history of",
-                          "wann war", "wann hat", "zeitverlauf", "geschichte von"]) {
+    if contains_any(&q, &["when did", "when was", "timeline", "history of"]) {
         *scores.entry(QuestionType::Temporal).or_default() += 0.6;
     }
-    if contains_any(&q, &["over the past", "how long ago", "since when",
-                          "seit wann", "wie lange", "im laufe"]) {
+    if contains_any(&q, &["over the past", "how long ago", "since when"]) {
         *scores.entry(QuestionType::Temporal).or_default() += 0.4;
     }
     if contains_any(
@@ -168,12 +166,6 @@ pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
             "evolution of",
             "over time",
             "progression",
-            "früher",
-            "ursprünglich",
-            "entwicklung von",
-            "über die zeit",
-            "im laufe der zeit",
-            "wie hat sich",
         ],
     ) {
         *scores.entry(QuestionType::Temporal).or_default() += 0.5;
@@ -185,42 +177,29 @@ pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
     }
     if contains_any(
         &q,
-        &[
-            "recently", "attended", "joined", "last time", "went to", "visited",
-            "zuletzt", "besucht", "teilgenommen",
-        ],
+        &["recently", "attended", "joined", "last time", "went to", "visited"],
     ) {
         *scores.entry(QuestionType::FactRecall).or_default() += 0.5;
     }
     if contains_any(
         &q,
-        &[
-            "what is my", "what are my", "tell me about", "do i have", "do i own",
-            "was ist mein", "was sind meine", "erzähl mir", "habe ich", "besitze ich",
-        ],
+        &["what is my", "what are my", "tell me about", "do i have", "do i own"],
     ) {
         *scores.entry(QuestionType::FactRecall).or_default() += 0.5;
     }
     if contains_any(
         &q,
-        &[
-            "what did i", "where do", "where did", "who is", "who was",
-            "was habe ich", "wo ist", "wo war", "wer ist", "wer war",
-        ],
+        &["what did i", "where do", "where did", "who is", "who was"],
     ) {
         *scores.entry(QuestionType::FactRecall).or_default() += 0.4;
     }
     if contains_any(
         &q,
-        &[
-            "why did", "what made", "decided", "reason", "because", "why do",
-            "warum", "weshalb", "wieso", "grund", "weil", "entschieden",
-        ],
+        &["why did", "what made", "decided", "reason", "because", "why do"],
     ) {
         *scores.entry(QuestionType::Reasoning).or_default() += 0.6;
     }
-    if contains_any(&q, &["motivation", "what led", "tradeoff", "trade-off",
-                          "motivation", "was hat dazu geführt", "abwägung"]) {
+    if contains_any(&q, &["motivation", "what led", "tradeoff", "trade-off"]) {
         *scores.entry(QuestionType::Reasoning).or_default() += 0.4;
     }
     if contains_any(
@@ -249,18 +228,13 @@ pub fn classify_question_mixed(query: &str) -> HashMap<QuestionType, f64> {
         &[
             "favorite", "prefer", "like most", "enjoy", "love", "hate",
             "dislike", "interested in", "passionate about",
-            "lieblings", "bevorzuge", "am liebsten", "genieße", "liebe",
-            "mag", "hasse", "interessiert", "begeistert", "geborgen",
         ],
     ) {
         *scores.entry(QuestionType::Preference).or_default() += 0.6;
     }
     if contains_any(
         &q,
-        &[
-            "what kind of", "what type of", "taste in", "style of",
-            "welche art", "welcher typ", "geschmack", "gefühl",
-        ],
+        &["what kind of", "what type of", "taste in", "style of"],
     ) {
         *scores.entry(QuestionType::Preference).or_default() += 0.4;
     }

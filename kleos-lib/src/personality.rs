@@ -289,6 +289,24 @@ static INTENSIFIERS: LazyLock<HashMap<&'static str, f64>> = LazyLock::new(|| {
     ])
 });
 
+/// Additional emotion keywords loaded from env vars at startup.
+/// KLEOS_PERSONALITY_POSITIVE_EXTRA and KLEOS_PERSONALITY_NEGATIVE_EXTRA
+/// accept comma-separated keyword lists (e.g. "verliebt,selig").
+static EXTRA_EMOTION_KEYWORDS: LazyLock<HashMap<String, EmotionMeta>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    if let Ok(v) = std::env::var("KLEOS_PERSONALITY_POSITIVE_EXTRA") {
+        for kw in v.split(',').map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()) {
+            map.insert(kw, EmotionMeta { valence: Valence::Positive, intensity: 0.65 });
+        }
+    }
+    if let Ok(v) = std::env::var("KLEOS_PERSONALITY_NEGATIVE_EXTRA") {
+        for kw in v.split(',').map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()) {
+            map.insert(kw, EmotionMeta { valence: Valence::Negative, intensity: 0.65 });
+        }
+    }
+    map
+});
+
 // ============================================================================
 // Regex patterns for signal extraction
 // ============================================================================
@@ -474,21 +492,21 @@ pub fn extract_signals_template(content: &str) -> Vec<PersonalitySignal> {
         }
     }
 
-    // Emotions (keyword scan per sentence)
+    // Emotions (keyword scan per sentence — built-ins + env-var extras)
     for sentence in &sentences {
         let lower = sentence.to_lowercase();
-        for (keyword, meta) in EMOTION_KEYWORDS.iter() {
-            if lower.contains(keyword) {
-                signals.push(PersonalitySignal {
-                    signal_type: SignalType::Emotion,
-                    subject: keyword.to_string(),
-                    valence: meta.valence,
-                    intensity: meta.intensity,
-                    reasoning: format!("Expressed {} emotion: {keyword}", meta.valence),
-                    source_text: sentence.chars().take(500).collect(),
-                });
-                break; // One emotion per sentence
-            }
+        let found = EMOTION_KEYWORDS.iter().map(|(k, m)| (*k, m.valence, m.intensity))
+            .chain(EXTRA_EMOTION_KEYWORDS.iter().map(|(k, m)| (k.as_str(), m.valence, m.intensity)))
+            .find(|(kw, _, _)| lower.contains(*kw));
+        if let Some((kw, valence, intensity)) = found {
+            signals.push(PersonalitySignal {
+                signal_type: SignalType::Emotion,
+                subject: kw.to_string(),
+                valence,
+                intensity,
+                reasoning: format!("Expressed {} emotion: {kw}", valence),
+                source_text: sentence.chars().take(500).collect(),
+            });
         }
     }
 
