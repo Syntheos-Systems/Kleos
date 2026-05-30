@@ -39,12 +39,12 @@ describe('App shell', () => {
     expect(screen.getByText('88')).toBeInTheDocument();
   });
 
-  it('keeps later-phase routes reachable before their pages land', () => {
-    window.history.pushState({}, '', '/memory');
+  it('keeps later graph route reachable before the graph page lands', () => {
+    window.history.pushState({}, '', '/graph');
 
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Memory' })).toBeInTheDocument();
-    expect(screen.getByText('Service view pending Phase 3.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Graph' })).toBeInTheDocument();
+    expect(screen.getByText('Service view pending Phase 4.')).toBeInTheDocument();
   });
 });

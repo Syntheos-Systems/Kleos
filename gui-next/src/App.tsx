@@ -5,6 +5,7 @@ import { Axon } from './routes/Axon';
 import { Broca } from './routes/Broca';
 import { Chiasm } from './routes/Chiasm';
 import { Loom } from './routes/Loom';
+import { Memory } from './routes/memory/Memory';
 import { Overview } from './routes/Overview';
 import { PlaceholderPage } from './routes/PlaceholderPage';
 import { Soma } from './routes/Soma';
@@ -24,7 +25,7 @@ export default function App() {
             <Route path="loom" element={<Loom />} />
             <Route path="axon" element={<Axon />} />
             <Route path="thymus" element={<Thymus />} />
-            <Route path="memory/*" element={<PlaceholderPage phase="Phase 3" title="Memory" />} />
+            <Route path="memory/*" element={<Memory />} />
             <Route path="graph" element={<PlaceholderPage phase="Phase 4" title="Graph" />} />
             <Route path="*" element={<Navigate replace to="/" />} />
           </Route>
