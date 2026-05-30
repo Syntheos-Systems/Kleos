@@ -71,6 +71,7 @@ pub enum EncryptionMode {
     Yubikey,
 }
 
+/// Configures database encryption mode selection.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 pub struct EncryptionConfig {
     #[serde(default)]
@@ -105,78 +106,97 @@ pub struct ServerEntry {
     pub notes: String,
 }
 
+/// Return the default SSH port for server inventory entries.
 fn default_ssh_port() -> u16 {
     22
 }
 
+/// Return the default number of daily backups to retain.
 fn default_backup_retention_daily() -> usize {
     30
 }
 
+/// Return whether the background dreamer task is enabled by default.
 fn default_dreamer_enabled() -> bool {
     true
 }
 
+/// Return the default dreamer tick interval in seconds.
 fn default_dream_interval_secs() -> u64 {
     300
 }
 
+/// Return the default idle threshold before the dreamer task may run.
 fn default_dream_idle_threshold_secs() -> u64 {
     60
 }
 
+/// Return whether skill evolution is enabled by default.
 fn default_skill_evolution_enabled() -> bool {
     true
 }
 
+/// Return the default interval between skill evolution ticks.
 fn default_skill_evolution_interval_secs() -> u64 {
     1800
 }
 
+/// Return the default cap on automatic skill fixes per tick.
 fn default_skill_evolution_max_fixes_per_tick() -> u32 {
     3
 }
 
+/// Return the default cap on candidate skill captures per tick.
 fn default_skill_evolution_max_captures_per_tick() -> u32 {
     2
 }
 
+/// Return the default cap on derived skills per tick.
 fn default_skill_evolution_max_derives_per_tick() -> u32 {
     1
 }
 
+/// Return the failure-rate threshold that triggers skill repair.
 fn default_skill_evolution_failure_threshold() -> f32 {
     0.3
 }
 
+/// Return the minimum executions before a skill can be evolved.
 fn default_skill_evolution_min_executions() -> u32 {
     5
 }
 
+/// Return the cooldown before a failed skill can be fixed again.
 fn default_skill_evolution_refix_cooldown_secs() -> u64 {
     86_400
 }
 
+/// Return the tag assigned to captured skill candidates.
 fn default_skill_evolution_capture_tag() -> String {
     "skill_candidate".to_string()
 }
 
+/// Return the similarity threshold for deriving related skills.
 fn default_skill_evolution_derive_similarity() -> f32 {
     0.7
 }
 
+/// Return the default local web-search service URL.
 fn default_web_search_url() -> String {
     "http://127.0.0.1:8888".to_string()
 }
 
+/// Return the default web-search timeout in milliseconds.
 fn default_web_search_timeout_ms() -> u64 {
     8000
 }
 
+/// Return the default number of web-search results to request.
 fn default_web_search_limit() -> u32 {
     10
 }
 
+/// Configures command guardrails and protected infrastructure targets.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GateConfig {
@@ -191,7 +211,9 @@ pub struct GateConfig {
     pub servers: Vec<ServerEntry>,
 }
 
+/// Supplies default guardrail patterns and empty protected inventories.
 impl Default for GateConfig {
+    /// Return the default gate configuration.
     fn default() -> Self {
         Self {
             blocked_patterns: vec![
@@ -214,6 +236,7 @@ impl Default for GateConfig {
     }
 }
 
+/// Configures growth/reflection loop cadence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GrowthConfig {
@@ -221,7 +244,9 @@ pub struct GrowthConfig {
     pub observation_limit: usize,
 }
 
+/// Supplies default growth/reflection settings.
 impl Default for GrowthConfig {
+    /// Return the default growth/reflection configuration.
     fn default() -> Self {
         Self {
             reflection_interval_secs: 3600,
@@ -230,6 +255,7 @@ impl Default for GrowthConfig {
     }
 }
 
+/// Configures session dump and restore behavior.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SessionsConfig {
@@ -239,7 +265,9 @@ pub struct SessionsConfig {
     pub scrub_secrets: bool,
 }
 
+/// Supplies default session handoff settings.
 impl Default for SessionsConfig {
+    /// Return the default session handoff configuration.
     fn default() -> Self {
         Self {
             max_concurrent: 64,
@@ -250,6 +278,7 @@ impl Default for SessionsConfig {
     }
 }
 
+/// Configures prompt routing and persona context behavior.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PromptConfig {
@@ -260,7 +289,9 @@ pub struct PromptConfig {
     pub max_tokens_cap: usize,
 }
 
+/// Supplies default prompt routing settings.
 impl Default for PromptConfig {
+    /// Return the default prompt routing configuration.
     fn default() -> Self {
         Self {
             default_max_tokens: 4000,
@@ -272,6 +303,7 @@ impl Default for PromptConfig {
     }
 }
 
+/// Configures the credential daemon integration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CreddConfig {
@@ -281,7 +313,9 @@ pub struct CreddConfig {
     pub cache_ttl_secs: u64,
 }
 
+/// Supplies default credential daemon settings.
 impl Default for CreddConfig {
+    /// Return the default credential daemon configuration.
     fn default() -> Self {
         Self {
             url: "http://127.0.0.1:4400".to_string(),
@@ -292,6 +326,7 @@ impl Default for CreddConfig {
     }
 }
 
+/// Configures Eidolon agent and activity integration.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct EidolonConfig {
@@ -311,7 +346,9 @@ pub struct EidolonConfig {
     pub prompt: PromptConfig,
 }
 
+/// Builds Eidolon configuration from environment variables.
 impl EidolonConfig {
+    /// Return Eidolon configuration after applying environment overrides.
     pub fn from_env() -> Self {
         Self::default().apply_env()
     }
@@ -415,6 +452,7 @@ pub struct SafetyConfig {
     pub rules: Vec<String>,
 }
 
+/// Holds all runtime configuration for the Kleos service and tools.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -445,8 +483,9 @@ pub struct Config {
     pub vector_dimensions: usize,
     pub use_lance_index: bool,
     pub use_chunk_vector_search: bool,
-    /// Whether the GUI is enabled. Set via ENGRAM_GUI_PASSWORD (any non-empty
-    /// value enables the GUI). A separate gui_password field can be added later
+    /// Whether the GUI is enabled. Set via KLEOS_GUI_PASSWORD or the legacy
+    /// ENGRAM_GUI_PASSWORD (any non-empty value enables the GUI).
+    /// A separate gui_password field can be added later
     /// when an actual password gate is needed; for now the field is a bool.
     #[serde(skip, default)]
     pub gui_enabled: bool,
@@ -559,7 +598,9 @@ pub struct Config {
     pub safety: SafetyConfig,
 }
 
+/// Supplies default runtime configuration values.
 impl Default for Config {
+    /// Return the default runtime configuration.
     fn default() -> Self {
         Self {
             db_path: "kleos.db".to_string(),
@@ -626,13 +667,15 @@ impl Default for Config {
     }
 }
 
+/// Loads and resolves Kleos runtime configuration.
 impl Config {
     /// Load a `Config` from a TOML file. Missing fields fall back to
     /// their `Default` values via `#[serde(default)]` on most fields.
     ///
     /// Secret fields (`api_key`, `eidolon.api_key`) are
     /// `#[serde(skip)]` and must be supplied via environment variables.
-    /// `gui_enabled` is also `#[serde(skip)]` and controlled by ENGRAM_GUI_PASSWORD.
+    /// `gui_enabled` is also `#[serde(skip)]` and controlled by KLEOS_GUI_PASSWORD
+    /// with ENGRAM_GUI_PASSWORD as a legacy fallback.
     pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> Result<Self, String> {
         let path = path.as_ref();
         let text =
@@ -692,10 +735,12 @@ impl Config {
         Self::apply_env(base)
     }
 
+    /// Load default configuration and apply environment overrides.
     pub fn from_env() -> Self {
         Self::apply_env(Self::default())
     }
 
+    /// Apply environment variable overrides to an existing configuration.
     fn apply_env(mut config: Self) -> Self {
         if let Ok(v) = std::env::var("ENGRAM_DB_PATH") {
             config.db_path = v;
@@ -833,10 +878,14 @@ impl Config {
         if let Ok(v) = std::env::var("KLEOS_USE_CHUNK_VECTOR_SEARCH") {
             config.use_chunk_vector_search = v == "1" || v.eq_ignore_ascii_case("true");
         }
-        if let Ok(v) = std::env::var("ENGRAM_GUI_PASSWORD") {
+        if let Ok(v) =
+            std::env::var("KLEOS_GUI_PASSWORD").or_else(|_| std::env::var("ENGRAM_GUI_PASSWORD"))
+        {
             config.gui_enabled = !v.is_empty();
         }
-        if let Ok(v) = std::env::var("ENGRAM_GUI_BUILD_DIR") {
+        if let Ok(v) =
+            std::env::var("KLEOS_GUI_BUILD_DIR").or_else(|_| std::env::var("ENGRAM_GUI_BUILD_DIR"))
+        {
             config.gui_build_dir = Some(v);
         }
         if let Ok(v) = std::env::var("ENGRAM_PAGERANK_REFRESH_INTERVAL") {
@@ -1153,9 +1202,11 @@ impl Config {
 }
 
 #[cfg(test)]
+/// Tests for configuration defaults and TOML parsing behavior.
 mod tests {
     use super::*;
 
+    /// Verifies nested Eidolon defaults are populated.
     #[test]
     fn eidolon_config_defaults_are_populated() {
         let c = EidolonConfig::default();
@@ -1163,11 +1214,12 @@ mod tests {
         assert_eq!(c.credd.url, "http://127.0.0.1:4400");
         assert_eq!(c.credd.agent_key_env, "CREDD_AGENT_KEY");
         assert!(!c.credd.allow_raw);
-        assert!(c
-            .gate
-            .blocked_patterns
-            .iter()
-            .any(|p| p.contains("rm -rf /")));
+        assert!(
+            c.gate
+                .blocked_patterns
+                .iter()
+                .any(|p| p.contains("rm -rf /"))
+        );
         assert_eq!(c.gate.approval_timeout_secs, 300);
         assert_eq!(c.growth.reflection_interval_secs, 3600);
         assert_eq!(c.growth.observation_limit, 100);
@@ -1179,12 +1231,14 @@ mod tests {
         assert!(c.prompt.default_include_memories);
     }
 
+    /// Verifies Config exposes the nested Eidolon prompt defaults.
     #[test]
     fn config_exposes_eidolon_field() {
         let c = Config::default();
         assert_eq!(c.eidolon.prompt.default_max_tokens, 4000);
     }
 
+    /// Verifies partial TOML files merge with defaults.
     #[test]
     fn from_file_parses_partial_toml_and_uses_defaults() {
         let dir = std::env::temp_dir().join(format!("engram-cfg-{}", std::process::id()));
@@ -1222,6 +1276,7 @@ default_max_tokens = 8000
         std::fs::remove_dir(&dir).ok();
     }
 
+    /// Verifies malformed TOML produces a parse error.
     #[test]
     fn from_file_rejects_malformed_toml() {
         let dir = std::env::temp_dir().join(format!("engram-cfg-bad-{}", std::process::id()));

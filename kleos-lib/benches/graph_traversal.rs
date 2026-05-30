@@ -3,16 +3,17 @@
 //! Seeds memories + memory_links with a synthetic concept graph (fanout
 //! 4) and benchmarks graph build at two node-count tiers.
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
 mod common;
 
-use common::{synthetic_memories, BenchDb, TIER_MED, TIER_SMALL};
+use common::{BenchDb, TIER_MED, TIER_SMALL, synthetic_memories};
 
 use kleos_lib::db::Database;
 use kleos_lib::graph::builder::build_graph_data;
 use kleos_lib::graph::types::GraphBuildOptions;
 
+/// Seed a synthetic graph into the benchmark database.
 fn seed_graph(db: &Database, rt: &tokio::runtime::Runtime, n: usize) {
     let rows = synthetic_memories(n);
     rt.block_on(async {
@@ -67,6 +68,7 @@ fn seed_graph(db: &Database, rt: &tokio::runtime::Runtime, n: usize) {
     });
 }
 
+/// Build and seed a temporary benchmark database.
 fn build_db(rt: &tokio::runtime::Runtime, n: usize) -> (BenchDb, Database) {
     let bench = BenchDb::new();
     let db = rt
@@ -76,6 +78,7 @@ fn build_db(rt: &tokio::runtime::Runtime, n: usize) -> (BenchDb, Database) {
     (bench, db)
 }
 
+/// Benchmark graph assembly over the configured synthetic tiers.
 fn bench_build_graph(c: &mut Criterion) {
     let rt = common::bench_runtime();
     let _guard = rt.enter();
@@ -87,6 +90,7 @@ fn bench_build_graph(c: &mut Criterion) {
         let opts = GraphBuildOptions {
             user_id: 1,
             limit: None,
+            min_component: 1,
         };
         group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, _| {
             b.iter(|| {

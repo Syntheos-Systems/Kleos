@@ -1,8 +1,8 @@
 use axum::{
+    Json, Router,
     extract::{Path, Query},
     http::StatusCode,
     routing::{get, post, put},
-    Json, Router,
 };
 use kleos_lib::facts::list_facts;
 use kleos_lib::graph::{
@@ -21,8 +21,8 @@ use kleos_lib::validation::{
     MAX_ENTITY_RELATIONSHIPS, MAX_GRAPH_BUILD_NODES, MAX_GRAPH_NEIGHBORHOOD_DEPTH,
     MAX_MEMORY_ENTITY_FANOUT,
 };
-use rusqlite::{params, OptionalExtension};
-use serde_json::{json, Value};
+use rusqlite::{OptionalExtension, params};
+use serde_json::{Value, json};
 
 use crate::{
     error::AppError,
@@ -123,7 +123,14 @@ async fn create_entity_handler(
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6) \
                  RETURNING id, name, entity_type, description, aliases, space_id, \
                  confidence, occurrence_count, first_seen_at, last_seen_at, created_at",
-                params![name, entity_type, description, aliases_json, space_id, user_id],
+                params![
+                    name,
+                    entity_type,
+                    description,
+                    aliases_json,
+                    space_id,
+                    user_id
+                ],
                 |row| row_to_entity_json(row, user_id),
             )?)
         })
@@ -266,9 +273,8 @@ async fn entity_relationships_handler(
     let relationships = db
         .read(move |conn| {
             if let Some(relationship_type) = params.relationship_type {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT er.id, er.source_entity_id, er.target_entity_id, er.relationship_type, \
+                let mut stmt = conn.prepare(
+                    "SELECT er.id, er.source_entity_id, er.target_entity_id, er.relationship_type, \
                          er.strength, er.evidence_count, er.created_at \
                          FROM entity_relationships er \
                          WHERE (er.source_entity_id = ?1 OR er.target_entity_id = ?1) \
@@ -276,32 +282,34 @@ async fn entity_relationships_handler(
                            AND EXISTS (SELECT 1 FROM entities WHERE id = ?1 AND user_id = ?4) \
                          ORDER BY er.strength DESC, er.id DESC \
                          LIMIT ?3",
-                    )?;
+                )?;
 
-                let rows = stmt
-                    .query_map(
-                        params![id, relationship_type, MAX_ENTITY_RELATIONSHIPS as i64, user_id],
-                        row_to_relationship_json,
-                    )?;
+                let rows = stmt.query_map(
+                    params![
+                        id,
+                        relationship_type,
+                        MAX_ENTITY_RELATIONSHIPS as i64,
+                        user_id
+                    ],
+                    row_to_relationship_json,
+                )?;
 
                 Ok(rows.collect::<Result<Vec<_>, _>>()?)
             } else {
-                let mut stmt = conn
-                    .prepare(
-                        "SELECT er.id, er.source_entity_id, er.target_entity_id, er.relationship_type, \
+                let mut stmt = conn.prepare(
+                    "SELECT er.id, er.source_entity_id, er.target_entity_id, er.relationship_type, \
                          er.strength, er.evidence_count, er.created_at \
                          FROM entity_relationships er \
                          WHERE (er.source_entity_id = ?1 OR er.target_entity_id = ?1) \
                            AND EXISTS (SELECT 1 FROM entities WHERE id = ?1 AND user_id = ?3) \
                          ORDER BY er.strength DESC, er.id DESC \
                          LIMIT ?2",
-                    )?;
+                )?;
 
-                let rows = stmt
-                    .query_map(
-                        params![id, MAX_ENTITY_RELATIONSHIPS as i64, user_id],
-                        row_to_relationship_json,
-                    )?;
+                let rows = stmt.query_map(
+                    params![id, MAX_ENTITY_RELATIONSHIPS as i64, user_id],
+                    row_to_relationship_json,
+                )?;
 
                 Ok(rows.collect::<Result<Vec<_>, _>>()?)
             }
@@ -496,6 +504,7 @@ async fn graph_handler(
     let opts = GraphBuildOptions {
         user_id: auth.user_id,
         limit: Some(cap),
+        min_component: params.min_component.unwrap_or(1),
     };
     let result = build_graph_data(&db, &opts).await.map_err(AppError)?;
     let node_count = result.nodes.len();
@@ -523,6 +532,7 @@ async fn graph_raw_handler(
             500,
             5000,
         )),
+        min_component: 1,
     };
     let result = build_graph_data(&db, &opts).await.map_err(AppError)?;
     Ok(Json(json!({
@@ -547,6 +557,7 @@ async fn graph_view_handler(
             500,
             5000,
         )),
+        min_component: 1,
     };
     let result = build_graph_data(&db, &opts).await.map_err(AppError)?;
     Ok(Json(json!({
@@ -571,7 +582,7 @@ async fn build_graph_handler(
         Some(0) => {
             return Err(AppError::from(kleos_lib::EngError::InvalidInput(
                 "limit must be >= 1".into(),
-            )))
+            )));
         }
         Some(n) => n.min(MAX_GRAPH_BUILD_NODES),
         None => MAX_GRAPH_BUILD_NODES,
@@ -885,6 +896,7 @@ fn row_to_entity_json(row: &rusqlite::Row<'_>, owner_user_id: i64) -> rusqlite::
     }))
 }
 
+/// Convert a relationship query row into the public JSON response shape.
 fn row_to_relationship_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     let id: i64 = row.get(0)?;
     let source_entity_id: i64 = row.get(1)?;
