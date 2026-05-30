@@ -326,6 +326,27 @@
   white-space: pre-wrap;
 }
 
+.graph-shell {
+  height: calc(100vh - 220px);
+  min-height: 520px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.graph-shell__meta {
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 11px;
+  left: var(--sp-2);
+  padding: 6px 8px;
+  position: absolute;
+  top: var(--sp-2);
+  z-index: 1;
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
