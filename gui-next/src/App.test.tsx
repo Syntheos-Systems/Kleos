@@ -39,12 +39,12 @@ describe('App shell', () => {
     expect(screen.getByText('88')).toBeInTheDocument();
   });
 
-  it('keeps service routes reachable before service-specific pages land', () => {
-    window.history.pushState({}, '', '/axon');
+  it('keeps later-phase routes reachable before their pages land', () => {
+    window.history.pushState({}, '', '/memory');
 
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Axon' })).toBeInTheDocument();
-    expect(screen.getByText('Service view pending Phase 2.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Memory' })).toBeInTheDocument();
+    expect(screen.getByText('Service view pending Phase 3.')).toBeInTheDocument();
   });
 });

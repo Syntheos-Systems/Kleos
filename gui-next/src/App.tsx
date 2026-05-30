@@ -1,9 +1,14 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { RealtimeProvider } from '$lib/realtime';
-import { SERVICES } from '$lib/services';
 import { AppShell } from './app/AppShell';
+import { Axon } from './routes/Axon';
+import { Broca } from './routes/Broca';
+import { Chiasm } from './routes/Chiasm';
+import { Loom } from './routes/Loom';
 import { Overview } from './routes/Overview';
 import { PlaceholderPage } from './routes/PlaceholderPage';
+import { Soma } from './routes/Soma';
+import { Thymus } from './routes/Thymus';
 
 // Render the Kleos dashboard providers, router, and top-level routes.
 export default function App() {
@@ -13,13 +18,12 @@ export default function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<Overview />} />
-            {SERVICES.map((service) => (
-              <Route
-                key={service.id}
-                path={service.route.slice(1)}
-                element={<PlaceholderPage title={service.label} />}
-              />
-            ))}
+            <Route path="chiasm" element={<Chiasm />} />
+            <Route path="broca" element={<Broca />} />
+            <Route path="soma" element={<Soma />} />
+            <Route path="loom" element={<Loom />} />
+            <Route path="axon" element={<Axon />} />
+            <Route path="thymus" element={<Thymus />} />
             <Route path="memory/*" element={<PlaceholderPage phase="Phase 3" title="Memory" />} />
             <Route path="graph" element={<PlaceholderPage phase="Phase 4" title="Graph" />} />
             <Route path="*" element={<Navigate replace to="/" />} />
