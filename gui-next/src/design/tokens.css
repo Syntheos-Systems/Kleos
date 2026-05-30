@@ -1,0 +1,105 @@
+:root {
+  --bg: #060608;
+  --surface: #0c0c10;
+  --surface-2: #111118;
+  --surface-hover: #16161f;
+  --border: #1e1e2e;
+  --border-glow: #2a2a3a;
+  --text: #c8ccd8;
+  --text-dim: #8588a0;
+  --text-faint: #575a70;
+  --accent: #c8ccd8;
+  --accent-dim: color-mix(in srgb, var(--accent) 35%, transparent);
+  --accent-faint: color-mix(in srgb, var(--accent) 12%, transparent);
+  --ok: #00e5a0;
+  --warn: #f5a623;
+  --err: #ff5f5f;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-display: "Syne", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --step-0: 13px;
+  --step-1: 15px;
+  --step-2: 19px;
+  --step-3: 26px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --radius: 8px;
+}
+
+[data-accent="chiasm"] {
+  --accent: #d4a030;
+}
+
+[data-accent="broca"] {
+  --accent: #00e5a0;
+}
+
+[data-accent="soma"] {
+  --accent: #38bdf8;
+}
+
+[data-accent="loom"] {
+  --accent: #a78bfa;
+}
+
+[data-accent="axon"] {
+  --accent: #f5a623;
+}
+
+[data-accent="thymus"] {
+  --accent: #fb7185;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--step-0);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.glass {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
