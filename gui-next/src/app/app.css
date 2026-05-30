@@ -22,6 +22,23 @@
   justify-content: space-between;
 }
 
+.app-shell__auth {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  min-height: 34px;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.app-shell__auth:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .app-shell__link {
   border-left: 2px solid transparent;
   color: var(--text-dim);
@@ -345,6 +362,76 @@
   position: absolute;
   top: var(--sp-2);
   z-index: 1;
+}
+
+.auth-modal {
+  align-items: center;
+  background: rgb(0 0 0 / 68%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: var(--sp-4);
+  position: fixed;
+  z-index: 20;
+}
+
+.auth-modal__panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 60px rgb(0 0 0 / 42%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-width: 360px;
+  padding: var(--sp-5);
+  width: min(100%, 360px);
+}
+
+.auth-modal__panel h2 {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+}
+
+.auth-modal__label {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.auth-modal__panel input {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  min-height: 38px;
+  padding: 6px 10px;
+}
+
+.auth-modal__actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.auth-modal__actions button {
+  border-radius: var(--radius);
+  cursor: pointer;
+  font: inherit;
+  min-height: 36px;
+  padding: 6px 12px;
+}
+
+.auth-modal__save {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #050608;
+  flex: 1;
+}
+
+.auth-modal__cancel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
 }
 
 @media (max-width: 760px) {

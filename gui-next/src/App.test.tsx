@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import type { ReactNode } from 'react';
@@ -24,6 +24,7 @@ vi.mock('$lib/realtime', () => ({
 
 describe('App shell', () => {
   beforeEach(() => {
+    localStorage.clear();
     window.history.pushState({}, '', '/');
   });
 
@@ -46,5 +47,16 @@ describe('App shell', () => {
 
     expect(screen.getByRole('heading', { name: 'Graph' })).toBeInTheDocument();
     expect(screen.getByText('Service view pending Phase 4.')).toBeInTheDocument();
+  });
+
+  it('lets the operator save an API key from the shell', () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'API Key' }));
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'abc123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(localStorage.getItem('kleos_api_key')).toBe('abc123');
+    expect(screen.queryByRole('dialog', { name: 'API Key' })).not.toBeInTheDocument();
   });
 });

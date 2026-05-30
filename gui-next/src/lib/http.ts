@@ -15,6 +15,11 @@ let unauthorized: (() => void) | null = null;
 // Register the callback fired when an API request receives 401.
 export function onUnauthorized(cb: () => void) {
   unauthorized = cb;
+  return () => {
+    if (unauthorized === cb) {
+      unauthorized = null;
+    }
+  };
 }
 
 // Build the API URL for production same-origin or local Vite proxy mode.
@@ -35,8 +40,9 @@ export interface RequestOpts {
 // Execute a same-origin Kleos API request and parse its JSON response.
 export async function request<T>(path: string, opts: RequestOpts = {}): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (opts.token) {
-    headers.Authorization = `Bearer ${opts.token}`;
+  const token = opts.token ?? currentToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
   const res = await fetch(buildUrl(path, opts.port), {

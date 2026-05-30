@@ -13,6 +13,7 @@ describe('buildUrl', () => {
 
 describe('request', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
@@ -51,5 +52,18 @@ describe('request', () => {
 
     const calls = spy.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit]>;
     expect(calls[0][1].headers).toMatchObject({ Authorization: 'Bearer abc' });
+  });
+
+  it('uses the saved bearer token by default', async () => {
+    const spy = vi.fn(
+      async () => new Response('{}', { headers: { 'content-type': 'application/json' }, status: 200 })
+    );
+    localStorage.setItem('kleos_api_key', 'stored');
+    vi.stubGlobal('fetch', spy);
+
+    await request('/x', { port: '4200' });
+
+    const calls = spy.mock.calls as unknown as Array<[RequestInfo | URL, RequestInit]>;
+    expect(calls[0][1].headers).toMatchObject({ Authorization: 'Bearer stored' });
   });
 });

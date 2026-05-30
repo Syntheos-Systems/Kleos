@@ -606,7 +606,8 @@ const LOGIN_JS: &str = "document.getElementById('login-form').addEventListener('
     const data = new FormData(form);\n\
     const res = await fetch('/gui/auth', { method: 'POST', body: new URLSearchParams(data) });\n\
     if (res.ok) {\n\
-        window.location.href = '/gui';\n\
+        window.localStorage.setItem('kleos_api_key', data.get('api_key'));\n\
+        window.location.href = '/';\n\
     } else {\n\
         document.getElementById('error').style.display = 'block';\n\
     }\n\
@@ -993,4 +994,17 @@ pub fn router() -> Router<AppState> {
             patch(gui_update_memory).delete(gui_delete_memory),
         )
         .route("/gui/memories/bulk-archive", post(gui_bulk_archive))
+}
+
+/// Unit tests for GUI auth helpers and embedded login assets.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Verify the login bridge keeps the React bearer token in sync with the GUI cookie login.
+    #[test]
+    fn login_js_stores_api_key_and_redirects_to_root() {
+        assert!(LOGIN_JS.contains("window.localStorage.setItem('kleos_api_key', data.get('api_key'))"));
+        assert!(LOGIN_JS.contains("window.location.href = '/'"));
+    }
 }
