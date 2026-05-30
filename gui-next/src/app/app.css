@@ -1,0 +1,127 @@
+.app-shell {
+  display: grid;
+  grid-template-columns: 228px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.app-shell__rail {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-5);
+}
+
+.app-shell__brand {
+  align-items: center;
+  color: var(--text);
+  display: flex;
+  font-family: var(--font-display);
+  font-size: var(--step-2);
+  justify-content: space-between;
+}
+
+.app-shell__link {
+  border-left: 2px solid transparent;
+  color: var(--text-dim);
+  display: block;
+  min-height: 38px;
+  padding: 10px 12px;
+}
+
+.app-shell__link.active {
+  background: var(--accent-faint);
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+
+.app-shell__main {
+  min-width: 0;
+  padding: var(--sp-6);
+}
+
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.overview__header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  justify-content: space-between;
+}
+
+.overview__title {
+  font-family: var(--font-display);
+  font-size: var(--step-3);
+}
+
+.overview__subtle {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.overview__grid {
+  display: grid;
+  gap: var(--sp-4);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.overview-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-height: 148px;
+}
+
+.overview-card__top {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.overview-card__name {
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: var(--step-1);
+}
+
+.overview-card__detail {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.placeholder h1 {
+  font-family: var(--font-display);
+  font-size: var(--step-3);
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell__rail {
+    border-bottom: 1px solid var(--border);
+    border-right: none;
+    padding: var(--sp-4);
+  }
+
+  .app-shell__rail nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app-shell__main {
+    padding: var(--sp-4);
+  }
+}
