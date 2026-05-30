@@ -2758,10 +2758,12 @@ fn ssh_ca_sign_impl(identity: &str, principal: &str, ttl: &str, pubkey: &Path) -
         .or_else(|_| std::env::var("PIV_PIN"))
         .ok()
         .filter(|p| !p.is_empty() && p != kleos_cred::piv::DEFAULT_PIN)
-        .ok_or_else(|| anyhow::anyhow!(
-            "PIV PIN not available: set YKMAN_PIN or PIV_PIN to a non-default value \
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "PIV PIN not available: set YKMAN_PIN or PIV_PIN to a non-default value \
              (refusing factory-default to avoid burning PIN retries)"
-        ))?;
+            )
+        })?;
     let askpass = std::env::temp_dir().join("cred-ssh-ca-askpass.sh");
     std::fs::write(&askpass, format!("#!/bin/sh\necho '{}'\n", pin))
         .context("write askpass helper")?;
