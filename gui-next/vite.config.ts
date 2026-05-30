@@ -5,6 +5,11 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [react()],
   base: '/',
+  resolve: {
+    alias: {
+      $lib: '/src/lib'
+    }
+  },
   build: {
     assetsDir: '_app',
     emptyOutDir: true,
@@ -20,6 +25,11 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    environmentOptions: {
+      jsdom: {
+        url: 'http://localhost:4200'
+      }
+    },
     globals: true,
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     passWithNoTests: true,
