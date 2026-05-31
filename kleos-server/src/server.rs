@@ -100,6 +100,7 @@ fn build_cors_layer() -> CorsLayer {
     }
 }
 
+use crate::middleware::act_as::act_as_middleware;
 use crate::middleware::audit::audit_middleware;
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::json_depth::json_depth_middleware;
@@ -189,6 +190,13 @@ pub fn build_router(state: AppState) -> Router {
     // API routes that require bearer token auth
     let api_routes = bare_routes
         .merge(mcp_route)
+        // Act-as delegation authorization. Innermost so it runs after
+        // auth_middleware has set the AuthContext and just before handlers and
+        // the ResolvedDb extractor, which read the delegated effective identity.
+        .layer(axum_mw::from_fn_with_state(
+            state.clone(),
+            act_as_middleware,
+        ))
         // Rate limit runs after auth (inner layer), then auth sets context (outer layer)
         .layer(axum_mw::from_fn_with_state(
             state.clone(),

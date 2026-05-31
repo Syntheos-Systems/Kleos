@@ -95,6 +95,7 @@ fn open_access_context() -> AuthContext {
             hash_version: 1,
         },
         user_id: 1,
+        act_as: None,
         identity: None,
     }
 }
@@ -341,6 +342,7 @@ async fn validate_mcp_token(
     Ok(AuthContext {
         key,
         user_id: payload.uid,
+        act_as: None,
         identity: None,
     })
 }
@@ -757,6 +759,7 @@ pub async fn auth_middleware(
         let auth_ctx = AuthContext {
             key: synthetic_key_for_identity_with_scopes(user_id, ik_row.scopes_json.as_deref()),
             user_id,
+            act_as: None,
             identity: Some(identity_ctx),
         };
 
@@ -961,6 +964,7 @@ pub async fn auth_middleware(
         let auth_ctx = AuthContext {
             key: synthetic_key_for_identity(1),
             user_id: 1,
+            act_as: None,
             identity: None,
         };
 
@@ -1040,6 +1044,7 @@ async fn resolve_identity_by_id(
     Ok(AuthContext {
         key: synthetic_key_for_identity_with_scopes(user_id, scopes_json.as_deref()),
         user_id,
+        act_as: None,
         identity: Some(IdentityCtx {
             identity_id: Some(identity_id),
             identity_key_id: ik_id,

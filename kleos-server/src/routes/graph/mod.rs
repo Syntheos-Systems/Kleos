@@ -1,8 +1,8 @@
 use axum::{
-    Json, Router,
     extract::{Path, Query},
     http::StatusCode,
     routing::{get, post, put},
+    Json, Router,
 };
 use kleos_lib::facts::list_facts;
 use kleos_lib::graph::{
@@ -21,8 +21,8 @@ use kleos_lib::validation::{
     MAX_ENTITY_RELATIONSHIPS, MAX_GRAPH_BUILD_NODES, MAX_GRAPH_NEIGHBORHOOD_DEPTH,
     MAX_MEMORY_ENTITY_FANOUT,
 };
-use rusqlite::{OptionalExtension, params};
-use serde_json::{Value, json};
+use rusqlite::{params, OptionalExtension};
+use serde_json::{json, Value};
 
 use crate::{
     error::AppError,
@@ -111,7 +111,7 @@ async fn create_entity_handler(
         .and_then(|a| serde_json::to_string(a).ok());
     let space_id = req.space_id;
     let name = req.name.clone();
-    let user_id = auth.user_id;
+    let user_id = auth.effective_user_id();
 
     // INSERT ... RETURNING avoids the cross-connection last_insert_rowid() race
     // that could hand a caller another tenant's row under concurrency. The
@@ -149,7 +149,7 @@ async fn list_entities_handler(
 ) -> Result<Json<Value>, AppError> {
     let limit = params.limit.unwrap_or(50).min(1000);
     let offset = params.offset.unwrap_or(0);
-    let user_id = auth.user_id;
+    let user_id = auth.effective_user_id();
 
     let results = db
         .read(move |conn| {
@@ -181,7 +181,7 @@ async fn get_entity_handler(
     ResolvedDb(db): ResolvedDb,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
-    let user_id = auth.user_id;
+    let user_id = auth.effective_user_id();
 
     let entity = db
         .read(move |conn| {
@@ -222,7 +222,7 @@ async fn update_entity_handler(
     let entity = update_entity(
         &db,
         id,
-        auth.user_id,
+        auth.effective_user_id(),
         body.name.as_deref(),
         body.entity_type.as_deref(),
         body.description.as_deref(),
@@ -242,7 +242,7 @@ async fn delete_entity_handler(
     ResolvedDb(db): ResolvedDb,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
-    let user_id = auth.user_id;
+    let user_id = auth.effective_user_id();
 
     db.write(move |conn| {
         conn.execute(
@@ -268,7 +268,7 @@ async fn entity_relationships_handler(
     // SECURITY/DoS: cap the fan-out so a hot entity cannot return an unbounded
     // result set and starve server memory. The anchor-entity owner predicate
     // keeps another user's relationships invisible in single-DB mode.
-    let user_id = auth.user_id;
+    let user_id = auth.effective_user_id();
 
     let relationships = db
         .read(move |conn| {
@@ -332,7 +332,7 @@ async fn delete_relationship_handler(
         &db,
         id,
         body.target_entity_id,
-        auth.user_id,
+        auth.effective_user_id(),
         body.relationship_type.as_deref(),
     )
     .await
@@ -354,7 +354,7 @@ async fn entity_memories_handler(
     ResolvedDb(db): ResolvedDb,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
-    let user_id = auth.user_id;
+    let user_id = auth.effective_user_id();
 
     let memory_ids = db
         .read(move |conn| {
@@ -386,7 +386,7 @@ async fn entity_search_handler(
     let memories = search_entity_memories(
         &db,
         id,
-        auth.user_id,
+        auth.effective_user_id(),
         &body.query,
         body.limit.unwrap_or(20).min(1000),
     )
@@ -404,7 +404,7 @@ async fn link_entity_memory_handler(
     ResolvedDb(db): ResolvedDb,
     Path((entity_id, memory_id)): Path<(i64, i64)>,
 ) -> Result<Json<Value>, AppError> {
-    link_memory_entity(&db, memory_id, entity_id, auth.user_id, 1.0)
+    link_memory_entity(&db, memory_id, entity_id, auth.effective_user_id(), 1.0)
         .await
         .map_err(AppError)?;
     Ok(Json(json!({
@@ -422,7 +422,7 @@ async fn unlink_entity_memory_handler(
     ResolvedDb(db): ResolvedDb,
     Path((entity_id, memory_id)): Path<(i64, i64)>,
 ) -> Result<Json<Value>, AppError> {
-    unlink_memory_entity(&db, memory_id, entity_id, auth.user_id)
+    unlink_memory_entity(&db, memory_id, entity_id, auth.effective_user_id())
         .await
         .map_err(AppError)?;
     Ok(Json(json!({
@@ -440,7 +440,7 @@ async fn create_relationship_handler(
     ResolvedDb(db): ResolvedDb,
     Json(req): Json<CreateRelationshipRequest>,
 ) -> Result<(StatusCode, Json<Value>), AppError> {
-    let user_id = auth.user_id;
+    let user_id = auth.effective_user_id();
     let source_id = req.source_entity_id;
     let target_id = req.target_entity_id;
 
@@ -502,7 +502,7 @@ async fn graph_handler(
         .map(|n| (n.max(1) as usize).min(MAX_GRAPH_BUILD_NODES))
         .unwrap_or(MAX_GRAPH_BUILD_NODES);
     let opts = GraphBuildOptions {
-        user_id: auth.user_id,
+        user_id: auth.effective_user_id(),
         limit: Some(cap),
         min_component: params.min_component.unwrap_or(1),
     };
@@ -526,7 +526,7 @@ async fn graph_raw_handler(
     Query(params): Query<ListQuery>,
 ) -> Result<Json<Value>, AppError> {
     let opts = GraphBuildOptions {
-        user_id: auth.user_id,
+        user_id: auth.effective_user_id(),
         limit: Some(kleos_lib::validation::clamp_signed_limit(
             params.limit.unwrap_or(500),
             500,
@@ -551,7 +551,7 @@ async fn graph_view_handler(
     Query(params): Query<ListQuery>,
 ) -> Result<Json<Value>, AppError> {
     let opts = GraphBuildOptions {
-        user_id: auth.user_id,
+        user_id: auth.effective_user_id(),
         limit: Some(kleos_lib::validation::clamp_signed_limit(
             params.limit.unwrap_or(500),
             500,
@@ -575,7 +575,7 @@ async fn build_graph_handler(
     ResolvedDb(db): ResolvedDb,
     Json(mut opts): Json<GraphBuildOptions>,
 ) -> Result<Json<Value>, AppError> {
-    opts.user_id = auth.user_id;
+    opts.user_id = auth.effective_user_id();
     // SECURITY/DoS: clamp caller-supplied node cap so a single request cannot
     // force the server to materialize an arbitrarily large graph.
     opts.limit = Some(match opts.limit {
@@ -600,7 +600,7 @@ async fn graph_search_handler(
     Json(body): Json<GraphSearchBody>,
 ) -> Result<Json<Value>, AppError> {
     let limit = body.limit.unwrap_or(20).min(1000);
-    let nodes = graph_search(&db, &body.query, limit, auth.user_id).await?;
+    let nodes = graph_search(&db, &body.query, limit, auth.effective_user_id()).await?;
     Ok(Json(json!({ "nodes": nodes })))
 }
 
@@ -628,8 +628,14 @@ async fn neighborhood_handler(
             .collect()
     });
 
-    let (nodes, edges, hops) =
-        neighborhood_filtered(&db, &id, depth, auth.user_id, link_types.as_deref()).await?;
+    let (nodes, edges, hops) = neighborhood_filtered(
+        &db,
+        &id,
+        depth,
+        auth.effective_user_id(),
+        link_types.as_deref(),
+    )
+    .await?;
     Ok(Json(
         json!({ "nodes": nodes, "edges": edges, "hops": hops }),
     ))
@@ -644,7 +650,7 @@ async fn memory_entities_handler(
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
     // SECURITY/DoS: cap entity fan-out per memory to avoid unbounded result sets.
-    let user_id = auth.user_id;
+    let user_id = auth.effective_user_id();
 
     let entities = db
         .read(move |conn| {
@@ -685,7 +691,7 @@ async fn communities_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
 ) -> Result<Json<Value>, AppError> {
-    let user_id = auth.user_id;
+    let user_id = auth.effective_user_id();
 
     // Fetch community -> memory_id mapping for the GUI graph visualization.
     // The GUI needs {id, top_memories: [memId, ...]} to map graph nodes to communities.
@@ -734,10 +740,10 @@ async fn community_detail_handler(
     ResolvedDb(db): ResolvedDb,
     Path(id): Path<i64>,
 ) -> Result<Json<Value>, AppError> {
-    let stats = get_community_stats(&db, auth.user_id)
+    let stats = get_community_stats(&db, auth.effective_user_id())
         .await
         .map_err(AppError)?;
-    let members = get_community_members(&db, id, auth.user_id, 50)
+    let members = get_community_members(&db, id, auth.effective_user_id(), 50)
         .await
         .map_err(AppError)?;
     let community = stats.into_iter().find(|item| item.community_id == id);
@@ -760,7 +766,7 @@ async fn detect_communities_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
 ) -> Result<Json<Value>, AppError> {
-    let result = detect_communities(&db, auth.user_id, 25)
+    let result = detect_communities(&db, auth.effective_user_id(), 25)
         .await
         .map_err(AppError)?;
     Ok(Json(json!(result)))
@@ -776,7 +782,7 @@ async fn community_members_handler(
     Query(params): Query<ListQuery>,
 ) -> Result<Json<Value>, AppError> {
     let limit = kleos_lib::validation::clamp_signed_limit(params.limit.unwrap_or(50), 50, 1000);
-    let members = get_community_members(&db, id, auth.user_id, limit)
+    let members = get_community_members(&db, id, auth.effective_user_id(), limit)
         .await
         .map_err(AppError)?;
     Ok(Json(json!({ "members": members })))
@@ -789,7 +795,7 @@ async fn community_stats_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
 ) -> Result<Json<Value>, AppError> {
-    let stats = get_community_stats(&db, auth.user_id)
+    let stats = get_community_stats(&db, auth.effective_user_id())
         .await
         .map_err(AppError)?;
     Ok(Json(json!({ "stats": stats })))
@@ -802,7 +808,7 @@ async fn pagerank_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
 ) -> Result<Json<Value>, AppError> {
-    let result = update_pagerank_scores(&db, auth.user_id)
+    let result = update_pagerank_scores(&db, auth.effective_user_id())
         .await
         .map_err(AppError)?;
     Ok(Json(json!(result)))
@@ -815,7 +821,7 @@ async fn rebuild_cooccurrences_handler(
     Auth(auth): Auth,
     ResolvedDb(db): ResolvedDb,
 ) -> Result<Json<Value>, AppError> {
-    let count = rebuild_cooccurrences(&db, auth.user_id)
+    let count = rebuild_cooccurrences(&db, auth.effective_user_id())
         .await
         .map_err(AppError)?;
     Ok(Json(json!({ "rebuilt": count })))
@@ -831,7 +837,7 @@ async fn entity_cooccurrences_handler(
     Query(params): Query<ListQuery>,
 ) -> Result<Json<Value>, AppError> {
     let limit = kleos_lib::validation::clamp_signed_limit(params.limit.unwrap_or(20), 20, 1000);
-    let entities = get_cooccurring_entities(&db, id, auth.user_id, limit)
+    let entities = get_cooccurring_entities(&db, id, auth.effective_user_id(), limit)
         .await
         .map_err(AppError)?;
     Ok(Json(json!({ "cooccurrences": entities })))
@@ -850,7 +856,7 @@ async fn facts_handler(
         &db,
         params.memory_id,
         params.limit.unwrap_or(50).min(1000),
-        auth.user_id,
+        auth.effective_user_id(),
     )
     .await
     .map_err(AppError)?;

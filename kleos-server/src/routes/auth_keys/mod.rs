@@ -1,17 +1,18 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     routing::{delete, post},
     Json, Router,
 };
-use kleos_lib::auth;
+use kleos_lib::spaces::{self, InstanceAccess};
+use kleos_lib::{audit, auth};
 use rusqlite::{params, OptionalExtension};
 use serde_json::{json, Value};
 
 use crate::{error::AppError, extractors::Auth, state::AppState};
 
 mod types;
-use types::{CreateKeyBody, CreateSpaceBody, RotateKeyBody};
+use types::{CreateGrantBody, CreateKeyBody, CreateSpaceBody, ListGrantsQuery, RotateKeyBody};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -21,6 +22,15 @@ pub fn router() -> Router<AppState> {
         // /users routes moved to routes::users module
         .route("/spaces", post(create_space).get(list_spaces))
         .route("/spaces/{id}", delete(delete_space))
+        // Instance-level access grants (Space Sharing, whole-instance model).
+        .route(
+            "/instance-grants",
+            post(create_instance_grant).get(list_instance_grants),
+        )
+        .route(
+            "/instance-grants/{owner}/{grantee}",
+            delete(revoke_instance_grant),
+        )
 }
 
 // ---- Key Management ----
@@ -354,4 +364,147 @@ async fn delete_space(
         .await?;
 
     Ok(Json(json!({ "deleted": true, "id": id })))
+}
+
+// ---- Instance Access Grants (Space Sharing) ----
+
+/// Create or update a grant that delegates access to an owner's entire shard.
+///
+/// SD2: only the instance owner or an admin may manage grants on a shard. A
+/// non-admin caller may therefore only grant access to their OWN shard.
+async fn create_instance_grant(
+    State(state): State<AppState>,
+    Auth(auth_ctx): Auth,
+    Json(body): Json<CreateGrantBody>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    let owner = body.owner_user_id;
+    let grantee = body.grantee_user_id;
+    let access: InstanceAccess = body.access.parse().map_err(AppError)?;
+
+    // SD2: owner-or-admin gate. Mirrors the `delete_space` ownership check.
+    if owner != auth_ctx.user_id && !auth_ctx.has_scope(&auth::Scope::Admin) {
+        return Err(AppError(kleos_lib::EngError::Forbidden(
+            "only the instance owner or an admin may manage grants".into(),
+        )));
+    }
+
+    // The grantee must be a real, active user, and the owner must exist, so a
+    // typo'd or disabled account can never be handed delegated access.
+    let (owner_exists, grantee_active): (bool, bool) = state
+        .db
+        .read(move |conn| {
+            let owner_exists: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?1)",
+                params![owner],
+                |r| r.get(0),
+            )?;
+            let grantee_active: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM users WHERE id = ?1 AND is_active = 1)",
+                params![grantee],
+                |r| r.get(0),
+            )?;
+            Ok((owner_exists, grantee_active))
+        })
+        .await?;
+    if !owner_exists {
+        return Err(AppError(kleos_lib::EngError::NotFound(format!(
+            "owner user {owner} not found"
+        ))));
+    }
+    if !grantee_active {
+        return Err(AppError(kleos_lib::EngError::InvalidInput(format!(
+            "grantee user {grantee} not found or inactive"
+        ))));
+    }
+
+    // Storage upserts on (owner, grantee) and rejects a self-grant.
+    spaces::grant_instance_access(&state.db, owner, grantee, access, auth_ctx.user_id).await?;
+
+    // SD5: record the grant in the audit trail (who granted what to whom).
+    let _ = audit::log_mutation(
+        &state.db,
+        "instance_grant.create",
+        "instance_grant",
+        &owner.to_string(),
+        Some(&auth_ctx.user_id.to_string()),
+        None,
+        Some(json!({ "owner": owner, "grantee": grantee, "access": access.as_str() })),
+    )
+    .await;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(json!({
+            "owner_user_id": owner,
+            "grantee_user_id": grantee,
+            "access": access.as_str(),
+        })),
+    ))
+}
+
+/// List the grants an owner has issued. Defaults to the caller's own shard;
+/// querying another owner requires Admin (or being that owner).
+async fn list_instance_grants(
+    State(state): State<AppState>,
+    Auth(auth_ctx): Auth,
+    Query(q): Query<ListGrantsQuery>,
+) -> Result<Json<Value>, AppError> {
+    let owner = q.owner.unwrap_or(auth_ctx.user_id);
+
+    if owner != auth_ctx.user_id && !auth_ctx.has_scope(&auth::Scope::Admin) {
+        return Err(AppError(kleos_lib::EngError::Forbidden(
+            "only the instance owner or an admin may list grants".into(),
+        )));
+    }
+
+    let grants = spaces::list_grants_for_owner(&state.db, owner).await?;
+    let grants_json: Vec<Value> = grants
+        .iter()
+        .map(|g| {
+            json!({
+                "owner_user_id": g.owner_user_id,
+                "grantee_user_id": g.grantee_user_id,
+                "access": g.access.as_str(),
+                "granted_by": g.granted_by,
+                "created_at": g.created_at,
+            })
+        })
+        .collect();
+
+    Ok(Json(
+        json!({ "grants": grants_json, "count": grants_json.len() }),
+    ))
+}
+
+/// Revoke a grant. Idempotent. SD2: owner-or-admin gate.
+async fn revoke_instance_grant(
+    State(state): State<AppState>,
+    Auth(auth_ctx): Auth,
+    Path((owner, grantee)): Path<(i64, i64)>,
+) -> Result<Json<Value>, AppError> {
+    if owner != auth_ctx.user_id && !auth_ctx.has_scope(&auth::Scope::Admin) {
+        return Err(AppError(kleos_lib::EngError::Forbidden(
+            "only the instance owner or an admin may revoke grants".into(),
+        )));
+    }
+
+    spaces::revoke_instance_access(&state.db, owner, grantee).await?;
+
+    // SD5: record the revoke in the audit trail.
+    let _ = audit::log_mutation(
+        &state.db,
+        "instance_grant.revoke",
+        "instance_grant",
+        &owner.to_string(),
+        Some(&auth_ctx.user_id.to_string()),
+        Some(json!({ "owner": owner, "grantee": grantee })),
+        None,
+    )
+    .await;
+
+    Ok(Json(json!({
+        "revoked": true,
+        "owner_user_id": owner,
+        "grantee_user_id": grantee,
+    })))
 }
