@@ -852,6 +852,38 @@ pub async fn auth_middleware(
     }
 
     // ---------------------------------------------------------------
+    // Path 3c: GUI session cookie (read-only).
+    //
+    // An EventSource (SSE) cannot send an Authorization header, so the
+    // realtime stream (/axon/stream) authenticates via the HMAC-signed,
+    // SameSite=Strict GUI cookie that EventSource does send same-origin.
+    // `get_gui_session` re-checks the underlying key is still active, so a
+    // revoked key's stale cookie stops working. Restricted to safe
+    // (non-mutating) methods so a cookie alone can never write: CSRF is
+    // already blocked by SameSite=Strict, and this is defense in depth.
+    // ---------------------------------------------------------------
+    if !requires_write_scope(&method) {
+        if let Some(session) = crate::routes::gui::get_gui_session(&state, request.headers()).await
+        {
+            if session.has_scope(&Scope::Read) {
+                let scopes_csv = kleos_lib::auth::scopes_to_string(&session.scopes);
+                let auth_ctx = AuthContext {
+                    key: synthetic_key_for_identity_with_scopes(session.user_id, Some(&scopes_csv)),
+                    user_id: session.user_id,
+                    act_as: None,
+                    identity: None,
+                };
+                let user_id = auth_ctx.user_id;
+                request.extensions_mut().insert(auth_ctx);
+                let span = tracing::info_span!("request",
+                    user_id = user_id, method = %method, path = %path,
+                    tier = "gui-cookie");
+                return next.run(request).instrument(span).await;
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------
     // Path 4: Enrollment proof-of-possession (PIV bootstrap)
     //
     // Only for POST /identity-keys/enroll. The request body carries a
