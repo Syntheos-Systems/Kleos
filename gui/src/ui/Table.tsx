@@ -1,24 +1,27 @@
 import type { ReactNode } from 'react';
 
-// Render a simple fixed-width data table.
-export function Table({ headers, rows }: { headers: string[]; rows: ReactNode[][] }) {
+// Per-column horizontal alignment; 'right' is for numeric columns.
+type Align = 'left' | 'right';
+
+// Render a dense operational data table with tabular numerics and zebra rows.
+export function Table({
+  headers,
+  rows,
+  align
+}: {
+  headers: string[];
+  rows: ReactNode[][];
+  align?: Align[];
+}) {
+  // Resolve the cell class for a column, marking numeric columns for right-align.
+  const colClass = (index: number) => (align?.[index] === 'right' ? 'num' : undefined);
+
   return (
-    <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%' }}>
+    <table className="k-table">
       <thead>
         <tr>
-          {headers.map((header) => (
-            <th
-              key={header}
-              style={{
-                borderBottom: '1px solid var(--border)',
-                color: 'var(--text-dim)',
-                fontSize: 10,
-                letterSpacing: 0,
-                padding: '6px 10px',
-                textAlign: 'left',
-                textTransform: 'uppercase'
-              }}
-            >
+          {headers.map((header, index) => (
+            <th className={colClass(index)} key={header}>
               {header}
             </th>
           ))}
@@ -26,9 +29,9 @@ export function Table({ headers, rows }: { headers: string[]; rows: ReactNode[][
       </thead>
       <tbody>
         {rows.map((row, rowIndex) => (
-          <tr key={rowIndex} style={{ borderBottom: '1px solid var(--border)' }}>
+          <tr key={rowIndex}>
             {row.map((cell, cellIndex) => (
-              <td key={cellIndex} style={{ color: 'var(--text)', padding: '8px 10px' }}>
+              <td className={colClass(cellIndex)} key={cellIndex}>
                 {cell}
               </td>
             ))}

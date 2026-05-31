@@ -472,3 +472,71 @@
     flex-direction: column;
   }
 }
+
+/* Dense operational data table: tabular numerics, zebra, hover, sticky head. */
+.k-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  width: 100%;
+}
+
+.k-table thead th {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+  position: sticky;
+  text-align: left;
+  text-transform: uppercase;
+  top: 0;
+  z-index: 1;
+}
+
+.k-table tbody tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.k-table tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--surface-2) 45%, transparent);
+}
+
+.k-table tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+.k-table td {
+  color: var(--text);
+  padding: 8px 10px;
+}
+
+.k-table td.num,
+.k-table th.num {
+  text-align: right;
+}
+
+/* Skeleton placeholder for async content (replaces spinners on first load). */
+.skeleton {
+  animation: skeleton-pulse 1.4s var(--ease-default) infinite;
+  background: var(--surface-2);
+  border-radius: 4px;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 0.85;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
