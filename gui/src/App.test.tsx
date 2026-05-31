@@ -54,13 +54,12 @@ describe('App shell', () => {
     expect(screen.getByText('88')).toBeInTheDocument();
   });
 
-  it('keeps later graph route reachable before the graph page lands', () => {
-    window.history.pushState({}, '', '/graph');
-
+  it('points the Graph nav at the real similarity graph under Memory', () => {
+    // Top-level /graph collides with the server's API-reserved /graph path, so
+    // the nav links to the working graph under Memory instead.
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: 'Graph' })).toBeInTheDocument();
-    expect(screen.getByText('Service view pending Phase 4.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Graph' })).toHaveAttribute('href', '/memory/graph');
   });
 
   it('lets the operator save an API key from the shell', () => {

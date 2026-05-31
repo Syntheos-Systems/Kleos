@@ -8,7 +8,6 @@ import { Chiasm } from './routes/Chiasm';
 import { Loom } from './routes/Loom';
 import { Memory } from './routes/memory/Memory';
 import { Overview } from './routes/Overview';
-import { PlaceholderPage } from './routes/PlaceholderPage';
 import { Soma } from './routes/Soma';
 import { Thymus } from './routes/Thymus';
 
@@ -28,7 +27,6 @@ export default function App() {
             <Route path="thymus" element={<Thymus />} />
             <Route path="memory/*" element={<Memory />} />
             <Route path="sharing" element={<Spaces />} />
-            <Route path="graph" element={<PlaceholderPage phase="Phase 4" title="Graph" />} />
             <Route path="*" element={<Navigate replace to="/" />} />
           </Route>
         </Routes>

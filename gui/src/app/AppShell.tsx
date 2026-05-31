@@ -10,7 +10,9 @@ import './app.css';
 
 const EXTRA_NAV = [
   { label: 'Memory', route: '/memory' },
-  { label: 'Graph', route: '/graph' }
+  // The real similarity graph lives under Memory; /graph (top level) collides
+  // with the server's API-reserved /graph path and cannot be served as a page.
+  { label: 'Graph', route: '/memory/graph' }
 ];
 
 // Admin-only navigation, shown when the caller holds the admin scope.
