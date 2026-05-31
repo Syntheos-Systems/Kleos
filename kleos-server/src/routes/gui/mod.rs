@@ -1,15 +1,15 @@
 use axum::{
-    Form, Json, Router,
     body::Body,
     extract::{Path, State},
-    http::{HeaderMap, Request, StatusCode, header},
+    http::{header, HeaderMap, Request, StatusCode},
     middleware::Next,
     response::{Html, IntoResponse, Response},
     routing::{get, patch, post},
+    Form, Json, Router,
 };
 use hmac::{Hmac, Mac};
 use secrecy::{ExposeSecret, SecretString};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::Sha256;
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -115,8 +115,8 @@ async fn load_or_generate_hmac_secret(data_dir: &str) -> SecretString {
                 "refusing to use non-absolute or traversing data_dir; falling back to ephemeral HMAC secret"
             );
             let mut raw = [0u8; 32];
-            use rand::TryRngCore;
             use rand::rngs::OsRng;
+            use rand::TryRngCore;
             OsRng
                 .try_fill_bytes(&mut raw)
                 .expect("OS CSPRNG must be available");
@@ -149,8 +149,8 @@ async fn load_or_generate_hmac_secret(data_dir: &str) -> SecretString {
 
     // Generate new secret: 32 bytes from OsRng, hex encoded.
     let secret = {
-        use rand::TryRngCore;
         use rand::rngs::OsRng;
+        use rand::TryRngCore;
         let mut raw = [0u8; 32];
         OsRng
             .try_fill_bytes(&mut raw)
@@ -603,13 +603,25 @@ button:hover { background: #6b4ed1; }\n\
 const LOGIN_JS: &str = "document.getElementById('login-form').addEventListener('submit', async (e) => {\n\
     e.preventDefault();\n\
     const form = e.target;\n\
+    const error = document.getElementById('error');\n\
     const data = new FormData(form);\n\
-    const res = await fetch('/gui/auth', { method: 'POST', body: new URLSearchParams(data) });\n\
-    if (res.ok) {\n\
-        window.localStorage.setItem('kleos_api_key', data.get('api_key'));\n\
-        window.location.href = '/';\n\
-    } else {\n\
-        document.getElementById('error').style.display = 'block';\n\
+    error.style.display = 'none';\n\
+    error.textContent = 'Invalid API key';\n\
+    try {\n\
+        const res = await fetch('/gui/auth', { method: 'POST', body: new URLSearchParams(data) });\n\
+        if (res.ok) {\n\
+            window.localStorage.setItem('kleos_api_key', data.get('api_key'));\n\
+            window.location.href = '/';\n\
+            return;\n\
+        }\n\
+        const message = await res.text();\n\
+        if (message) {\n\
+            error.textContent = message;\n\
+        }\n\
+        error.style.display = 'block';\n\
+    } catch (_error) {\n\
+        error.textContent = 'Unable to reach Kleos. Check that the server is running and try again.';\n\
+        error.style.display = 'block';\n\
     }\n\
 });\n";
 
@@ -1004,7 +1016,17 @@ mod tests {
     // Verify the login bridge keeps the React bearer token in sync with the GUI cookie login.
     #[test]
     fn login_js_stores_api_key_and_redirects_to_root() {
-        assert!(LOGIN_JS.contains("window.localStorage.setItem('kleos_api_key', data.get('api_key'))"));
+        assert!(
+            LOGIN_JS.contains("window.localStorage.setItem('kleos_api_key', data.get('api_key'))")
+        );
         assert!(LOGIN_JS.contains("window.location.href = '/'"));
+    }
+
+    // Verify network failures render a visible login error instead of silently throwing in the page.
+    #[test]
+    fn login_js_handles_fetch_failures() {
+        assert!(LOGIN_JS.contains("try {"));
+        assert!(LOGIN_JS.contains("catch"));
+        assert!(LOGIN_JS.contains("Unable to reach Kleos"));
     }
 }
