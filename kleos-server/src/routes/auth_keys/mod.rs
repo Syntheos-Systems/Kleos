@@ -33,6 +33,11 @@ pub fn router() -> Router<AppState> {
             "/instance-grants/{owner}/{grantee}",
             delete(revoke_instance_grant),
         )
+        // Admin-wide overviews for the Spaces and Sharing console. A dedicated
+        // /sharing/* namespace avoids shadowing the GUI's /admin/spaces browser
+        // route and any /spaces/{id} or /instance-grants/{..} param routes.
+        .route("/sharing/grants", get(list_all_instance_grants))
+        .route("/sharing/spaces", get(list_all_spaces))
 }
 
 // ---- Caller identity ----
@@ -40,7 +45,10 @@ pub fn router() -> Router<AppState> {
 /// GET /me -- report the authenticated caller's identity and scopes so the GUI
 /// can gate admin-only surfaces (e.g. the Spaces and Sharing page). This always
 /// reflects the REAL caller, never an act-as target.
-async fn whoami(State(state): State<AppState>, Auth(auth_ctx): Auth) -> Result<Json<Value>, AppError> {
+async fn whoami(
+    State(state): State<AppState>,
+    Auth(auth_ctx): Auth,
+) -> Result<Json<Value>, AppError> {
     let scopes: Vec<String> = auth_ctx.key.scopes.iter().map(|s| s.to_string()).collect();
     let is_admin = auth_ctx.has_scope(&auth::Scope::Admin);
     let uid = auth_ctx.user_id;
@@ -538,4 +546,85 @@ async fn revoke_instance_grant(
         "owner_user_id": owner,
         "grantee_user_id": grantee,
     })))
+}
+
+/// GET /admin/instance-grants -- every instance grant across all owners, with
+/// usernames resolved, for the admin Spaces and Sharing overview. Admin only.
+async fn list_all_instance_grants(
+    State(state): State<AppState>,
+    Auth(auth_ctx): Auth,
+) -> Result<Json<Value>, AppError> {
+    if !auth_ctx.has_scope(&auth::Scope::Admin) {
+        return Err(AppError(kleos_lib::EngError::Forbidden(
+            "admin scope required".into(),
+        )));
+    }
+    let grants: Vec<Value> = state
+        .db
+        .read(move |conn| {
+            let mut stmt = conn.prepare(
+                "SELECT g.owner_user_id, ou.username, g.grantee_user_id, gu.username,
+                        g.access, g.granted_by, bu.username, g.created_at
+                 FROM instance_grants g
+                 LEFT JOIN users ou ON ou.id = g.owner_user_id
+                 LEFT JOIN users gu ON gu.id = g.grantee_user_id
+                 LEFT JOIN users bu ON bu.id = g.granted_by
+                 ORDER BY ou.username, gu.username",
+            )?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok(json!({
+                        "owner_user_id": r.get::<_, i64>(0)?,
+                        "owner_username": r.get::<_, Option<String>>(1)?,
+                        "grantee_user_id": r.get::<_, i64>(2)?,
+                        "grantee_username": r.get::<_, Option<String>>(3)?,
+                        "access": r.get::<_, String>(4)?,
+                        "granted_by": r.get::<_, i64>(5)?,
+                        "granted_by_username": r.get::<_, Option<String>>(6)?,
+                        "created_at": r.get::<_, String>(7)?,
+                    }))
+                })?
+                .collect::<rusqlite::Result<Vec<Value>>>()?;
+            Ok(rows)
+        })
+        .await?;
+    Ok(Json(json!({ "grants": grants, "count": grants.len() })))
+}
+
+/// GET /admin/spaces -- every named space across all users, with the owner
+/// username resolved, for the admin Spaces and Sharing overview. Admin only.
+async fn list_all_spaces(
+    State(state): State<AppState>,
+    Auth(auth_ctx): Auth,
+) -> Result<Json<Value>, AppError> {
+    if !auth_ctx.has_scope(&auth::Scope::Admin) {
+        return Err(AppError(kleos_lib::EngError::Forbidden(
+            "admin scope required".into(),
+        )));
+    }
+    let spaces: Vec<Value> = state
+        .db
+        .read(move |conn| {
+            let mut stmt = conn.prepare(
+                "SELECT s.id, s.user_id, u.username, s.name, s.description, s.created_at
+                 FROM spaces s
+                 LEFT JOIN users u ON u.id = s.user_id
+                 ORDER BY u.username, s.name",
+            )?;
+            let rows = stmt
+                .query_map([], |r| {
+                    Ok(json!({
+                        "id": r.get::<_, i64>(0)?,
+                        "owner_user_id": r.get::<_, i64>(1)?,
+                        "owner_username": r.get::<_, Option<String>>(2)?,
+                        "name": r.get::<_, String>(3)?,
+                        "description": r.get::<_, Option<String>>(4)?,
+                        "created_at": r.get::<_, String>(5)?,
+                    }))
+                })?
+                .collect::<rusqlite::Result<Vec<Value>>>()?;
+            Ok(rows)
+        })
+        .await?;
+    Ok(Json(json!({ "spaces": spaces, "count": spaces.len() })))
 }

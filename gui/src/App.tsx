@@ -27,7 +27,7 @@ export default function App() {
             <Route path="axon" element={<Axon />} />
             <Route path="thymus" element={<Thymus />} />
             <Route path="memory/*" element={<Memory />} />
-            <Route path="admin/spaces" element={<Spaces />} />
+            <Route path="sharing" element={<Spaces />} />
             <Route path="graph" element={<PlaceholderPage phase="Phase 4" title="Graph" />} />
             <Route path="*" element={<Navigate replace to="/" />} />
           </Route>

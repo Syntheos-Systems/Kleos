@@ -428,14 +428,79 @@ async fn me_reports_caller_scopes() {
 
     let (status, body) = get(&app, "/me", &admin).await;
     assert!(status.is_success(), "admin /me: {status} {body}");
-    assert_eq!(body["is_admin"], true, "admin key must report is_admin: {body}");
+    assert_eq!(
+        body["is_admin"], true,
+        "admin key must report is_admin: {body}"
+    );
 
     let (status, body) = get(&app, "/me", &user_key).await;
     assert!(status.is_success(), "user /me: {status} {body}");
-    assert_eq!(body["is_admin"], false, "non-admin must report is_admin false: {body}");
+    assert_eq!(
+        body["is_admin"], false,
+        "non-admin must report is_admin false: {body}"
+    );
     let scopes = body["scopes"].as_array().expect("scopes array");
     assert!(
         scopes.iter().any(|s| s == "write"),
         "seeded user has read,write scopes: {body}"
+    );
+}
+
+/// The admin overview endpoints list every grant and every space across all
+/// users with usernames resolved, and reject non-admins.
+#[tokio::test]
+async fn admin_overviews_list_all() {
+    let (app, _state, _tmp) = test_app_with_sharding().await;
+    let admin = bootstrap_admin_key(&app).await;
+    let (alice_uid, alice_key) = seed_user(&app, &admin, "alice").await;
+    let (bob_uid, _bob_key) = seed_user(&app, &admin, "bob").await;
+
+    let (status, _b) = post(
+        &app,
+        "/spaces",
+        &alice_key,
+        json!({ "name": "alice-space" }),
+    )
+    .await;
+    assert!(status.is_success(), "create space: {status}");
+    let (status, _b) = post(
+        &app,
+        "/instance-grants",
+        &admin,
+        json!({ "owner_user_id": alice_uid, "grantee_user_id": bob_uid, "access": "read" }),
+    )
+    .await;
+    assert!(status.is_success());
+
+    // All grants, with usernames.
+    let (status, body) = get(&app, "/sharing/grants", &admin).await;
+    assert!(status.is_success(), "admin grants: {status} {body}");
+    assert!(
+        body["grants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|g| g["owner_username"] == "alice" && g["grantee_username"] == "bob"),
+        "grant overview must resolve usernames: {body}"
+    );
+
+    // All spaces, with owner username.
+    let (status, body) = get(&app, "/sharing/spaces", &admin).await;
+    assert!(status.is_success(), "admin spaces: {status} {body}");
+    assert!(
+        body["spaces"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|s| s["owner_username"] == "alice" && s["name"] == "alice-space"),
+        "space overview must resolve owner username: {body}"
+    );
+
+    // Non-admins are rejected.
+    let (status, _b) = get(&app, "/sharing/grants", &alice_key).await;
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "non-admin overview must be 403"
     );
 }

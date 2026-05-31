@@ -354,3 +354,25 @@ export interface InstanceGrant {
   granted_by: number;
   created_at: string;
 }
+
+// Represents one grant in the admin overview, with usernames resolved.
+export interface AdminGrant {
+  owner_user_id: number;
+  owner_username: string | null;
+  grantee_user_id: number;
+  grantee_username: string | null;
+  access: InstanceAccess;
+  granted_by: number;
+  granted_by_username: string | null;
+  created_at: string;
+}
+
+// Represents one named space in the admin overview, with the owner resolved.
+export interface AdminSpace {
+  id: number;
+  owner_user_id: number;
+  owner_username: string | null;
+  name: string;
+  description: string | null;
+  created_at: string;
+}

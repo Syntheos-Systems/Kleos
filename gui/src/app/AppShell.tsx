@@ -14,7 +14,9 @@ const EXTRA_NAV = [
 ];
 
 // Admin-only navigation, shown when the caller holds the admin scope.
-const ADMIN_NAV = [{ label: 'Spaces & Sharing', route: '/admin/spaces' }];
+// `/sharing` (not `/admin/*` or `/spaces`, both reserved for the API) so the
+// server's SPA fallback serves this browser route.
+const ADMIN_NAV = [{ label: 'Spaces & Sharing', route: '/sharing' }];
 
 // Render the persistent dashboard chrome around route content.
 export function AppShell() {
