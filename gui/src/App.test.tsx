@@ -12,15 +12,29 @@ const liveStats = vi.hoisted(() => ({
   thymus: { agent_count: 4, by_rubric: [], evaluations: 11, metrics: 2, rubrics: 6 }
 }));
 
-vi.mock('$lib/realtime', () => ({
-  RealtimeProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  useLive: (_key: unknown, _fetcher: unknown, channel: keyof typeof liveStats) => ({
-    data: liveStats[channel],
-    isError: false,
-    isLoading: false
-  }),
-  useStreamStatus: () => 'live'
+// AppShell resolves the caller's scopes via getMe; stub it as a non-admin so
+// no real request is made and the admin nav stays hidden.
+vi.mock('$lib/api/admin', () => ({
+  getMe: () => Promise.resolve({ is_admin: false, scopes: ['read'], user_id: 1, username: 'root' })
 }));
+
+// Provide a real QueryClient (AppShell now uses useQuery) without the live SSE
+// stream the real RealtimeProvider would open in jsdom.
+vi.mock('$lib/realtime', async () => {
+  const rq = await import('@tanstack/react-query');
+  const client = new rq.QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return {
+    RealtimeProvider: ({ children }: { children: ReactNode }) => (
+      <rq.QueryClientProvider client={client}>{children}</rq.QueryClientProvider>
+    ),
+    useLive: (_key: unknown, _fetcher: unknown, channel: keyof typeof liveStats) => ({
+      data: liveStats[channel],
+      isError: false,
+      isLoading: false
+    }),
+    useStreamStatus: () => 'live'
+  };
+});
 
 describe('App shell', () => {
   beforeEach(() => {

@@ -324,3 +324,33 @@ export interface GraphData {
   node_count: number;
   edge_count: number;
 }
+
+// Access level an instance grant conveys over an owner's shard.
+export type InstanceAccess = 'read' | 'write';
+
+// Represents the authenticated caller's identity and scopes (GET /me).
+export interface Me {
+  user_id: number;
+  username: string | null;
+  scopes: string[];
+  is_admin: boolean;
+}
+
+// Represents a Kleos user as returned by the admin user list.
+export interface KleosUser {
+  id: number;
+  username: string;
+  email?: string | null;
+  role?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+}
+
+// Represents one instance-level access grant (Spaces and Sharing).
+export interface InstanceGrant {
+  owner_user_id: number;
+  grantee_user_id: number;
+  access: InstanceAccess;
+  granted_by: number;
+  created_at: string;
+}

@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { RealtimeProvider } from '$lib/realtime';
 import { AppShell } from './app/AppShell';
+import { Spaces } from './routes/admin/Spaces';
 import { Axon } from './routes/Axon';
 import { Broca } from './routes/Broca';
 import { Chiasm } from './routes/Chiasm';
@@ -26,6 +27,7 @@ export default function App() {
             <Route path="axon" element={<Axon />} />
             <Route path="thymus" element={<Thymus />} />
             <Route path="memory/*" element={<Memory />} />
+            <Route path="admin/spaces" element={<Spaces />} />
             <Route path="graph" element={<PlaceholderPage phase="Phase 4" title="Graph" />} />
             <Route path="*" element={<Navigate replace to="/" />} />
           </Route>

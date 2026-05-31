@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
-    routing::{delete, post},
+    routing::{delete, get, post},
     Json, Router,
 };
 use kleos_lib::spaces::{self, InstanceAccess};
@@ -19,6 +19,8 @@ pub fn router() -> Router<AppState> {
         .route("/keys", post(create_key).get(list_keys))
         .route("/keys/{id}", delete(revoke_key))
         .route("/keys/rotate", post(rotate_key))
+        // Caller identity + scopes, so the GUI can gate admin-only surfaces.
+        .route("/me", get(whoami))
         // /users routes moved to routes::users module
         .route("/spaces", post(create_space).get(list_spaces))
         .route("/spaces/{id}", delete(delete_space))
@@ -31,6 +33,35 @@ pub fn router() -> Router<AppState> {
             "/instance-grants/{owner}/{grantee}",
             delete(revoke_instance_grant),
         )
+}
+
+// ---- Caller identity ----
+
+/// GET /me -- report the authenticated caller's identity and scopes so the GUI
+/// can gate admin-only surfaces (e.g. the Spaces and Sharing page). This always
+/// reflects the REAL caller, never an act-as target.
+async fn whoami(State(state): State<AppState>, Auth(auth_ctx): Auth) -> Result<Json<Value>, AppError> {
+    let scopes: Vec<String> = auth_ctx.key.scopes.iter().map(|s| s.to_string()).collect();
+    let is_admin = auth_ctx.has_scope(&auth::Scope::Admin);
+    let uid = auth_ctx.user_id;
+    let username: Option<String> = state
+        .db
+        .read(move |conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT username FROM users WHERE id = ?1",
+                    params![uid],
+                    |r| r.get(0),
+                )
+                .optional()?)
+        })
+        .await?;
+    Ok(Json(json!({
+        "user_id": auth_ctx.user_id,
+        "username": username,
+        "scopes": scopes,
+        "is_admin": is_admin,
+    })))
 }
 
 // ---- Key Management ----

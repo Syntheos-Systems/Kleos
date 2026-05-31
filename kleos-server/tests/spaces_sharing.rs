@@ -417,3 +417,25 @@ async fn act_as_surfaces_owner_memories() {
         "no grant must be 403 on memory act-as"
     );
 }
+
+/// GET /me reports the caller's real identity and scopes so the GUI can gate
+/// admin-only surfaces. Admin keys report is_admin true; others false.
+#[tokio::test]
+async fn me_reports_caller_scopes() {
+    let (app, _state, _tmp) = test_app_with_sharding().await;
+    let admin = bootstrap_admin_key(&app).await;
+    let (_uid, user_key) = seed_user(&app, &admin, "alice").await;
+
+    let (status, body) = get(&app, "/me", &admin).await;
+    assert!(status.is_success(), "admin /me: {status} {body}");
+    assert_eq!(body["is_admin"], true, "admin key must report is_admin: {body}");
+
+    let (status, body) = get(&app, "/me", &user_key).await;
+    assert!(status.is_success(), "user /me: {status} {body}");
+    assert_eq!(body["is_admin"], false, "non-admin must report is_admin false: {body}");
+    let scopes = body["scopes"].as_array().expect("scopes array");
+    assert!(
+        scopes.iter().any(|s| s == "write"),
+        "seeded user has read,write scopes: {body}"
+    );
+}

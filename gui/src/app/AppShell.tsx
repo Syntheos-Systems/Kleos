@@ -1,5 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { getMe } from '$lib/api/admin';
 import { currentToken, onUnauthorized } from '$lib/http';
 import { SERVICES } from '$lib/services';
 import { AuthModal } from './AuthModal';
@@ -11,9 +13,15 @@ const EXTRA_NAV = [
   { label: 'Graph', route: '/graph' }
 ];
 
+// Admin-only navigation, shown when the caller holds the admin scope.
+const ADMIN_NAV = [{ label: 'Spaces & Sharing', route: '/admin/spaces' }];
+
 // Render the persistent dashboard chrome around route content.
 export function AppShell() {
   const [authOpen, setAuthOpen] = useState(() => !currentToken());
+  // Resolve the caller's scopes so the admin nav only renders for admins.
+  const me = useQuery({ queryFn: getMe, queryKey: ['me'], retry: false });
+  const isAdmin = me.data?.is_admin === true;
 
   useEffect(() => onUnauthorized(() => setAuthOpen(true)), []);
 
@@ -46,6 +54,13 @@ export function AppShell() {
               {item.label}
             </NavLink>
           ))}
+          {isAdmin
+            ? ADMIN_NAV.map((item) => (
+                <NavLink className="app-shell__link" key={item.route} to={item.route}>
+                  {item.label}
+                </NavLink>
+              ))
+            : null}
         </nav>
       </aside>
       <main className="app-shell__main">
