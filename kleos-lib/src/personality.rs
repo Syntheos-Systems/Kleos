@@ -263,6 +263,154 @@ static EMOTION_KEYWORDS: LazyLock<HashMap<&'static str, EmotionMeta>> = LazyLock
                 intensity: 0.4,
             },
         ),
+        // German emotion keywords
+        (
+            "glücklich",
+            EmotionMeta {
+                valence: Valence::Positive,
+                intensity: 0.6,
+            },
+        ),
+        (
+            "froh",
+            EmotionMeta {
+                valence: Valence::Positive,
+                intensity: 0.6,
+            },
+        ),
+        (
+            "begeistert",
+            EmotionMeta {
+                valence: Valence::Positive,
+                intensity: 0.8,
+            },
+        ),
+        (
+            "aufgeregt",
+            EmotionMeta {
+                valence: Valence::Positive,
+                intensity: 0.8,
+            },
+        ),
+        (
+            "dankbar",
+            EmotionMeta {
+                valence: Valence::Positive,
+                intensity: 0.7,
+            },
+        ),
+        (
+            "stolz",
+            EmotionMeta {
+                valence: Valence::Positive,
+                intensity: 0.7,
+            },
+        ),
+        (
+            "erleichtert",
+            EmotionMeta {
+                valence: Valence::Positive,
+                intensity: 0.5,
+            },
+        ),
+        (
+            "zufrieden",
+            EmotionMeta {
+                valence: Valence::Positive,
+                intensity: 0.5,
+            },
+        ),
+        (
+            "fasziniert",
+            EmotionMeta {
+                valence: Valence::Positive,
+                intensity: 0.7,
+            },
+        ),
+        (
+            "motiviert",
+            EmotionMeta {
+                valence: Valence::Positive,
+                intensity: 0.7,
+            },
+        ),
+        (
+            "traurig",
+            EmotionMeta {
+                valence: Valence::Negative,
+                intensity: 0.6,
+            },
+        ),
+        (
+            "wütend",
+            EmotionMeta {
+                valence: Valence::Negative,
+                intensity: 0.8,
+            },
+        ),
+        (
+            "frustriert",
+            EmotionMeta {
+                valence: Valence::Negative,
+                intensity: 0.7,
+            },
+        ),
+        (
+            "genervt",
+            EmotionMeta {
+                valence: Valence::Negative,
+                intensity: 0.6,
+            },
+        ),
+        (
+            "ängstlich",
+            EmotionMeta {
+                valence: Valence::Negative,
+                intensity: 0.6,
+            },
+        ),
+        (
+            "gestresst",
+            EmotionMeta {
+                valence: Valence::Negative,
+                intensity: 0.7,
+            },
+        ),
+        (
+            "enttäuscht",
+            EmotionMeta {
+                valence: Valence::Negative,
+                intensity: 0.6,
+            },
+        ),
+        (
+            "überfordert",
+            EmotionMeta {
+                valence: Valence::Negative,
+                intensity: 0.8,
+            },
+        ),
+        (
+            "müde",
+            EmotionMeta {
+                valence: Valence::Negative,
+                intensity: 0.4,
+            },
+        ),
+        (
+            "gelangweilt",
+            EmotionMeta {
+                valence: Valence::Negative,
+                intensity: 0.4,
+            },
+        ),
+        (
+            "erschöpft",
+            EmotionMeta {
+                valence: Valence::Negative,
+                intensity: 0.7,
+            },
+        ),
     ])
 });
 
@@ -286,6 +434,20 @@ static INTENSIFIERS: LazyLock<HashMap<&'static str, f64>> = LazyLock::new(|| {
         ("barely", 0.5),
         ("hardly", 0.5),
         ("mildly", 0.6),
+        // German intensifiers
+        ("sehr", 1.3),
+        ("wirklich", 1.3),
+        ("absolut", 1.4),
+        ("extrem", 1.4),
+        ("unglaublich", 1.4),
+        ("total", 1.3),
+        ("zutiefst", 1.3),
+        ("enorm", 1.3),
+        ("etwas", 0.7),
+        ("ein bisschen", 0.7),
+        ("leicht", 0.7),
+        ("kaum", 0.5),
+        ("wenig", 0.6),
     ])
 });
 
@@ -341,31 +503,31 @@ macro_rules! lazy_regex {
 
 lazy_regex!(
     LIKE_PATTERN,
-    r"(?i)\b(?:I\s+)?(?:love|like|enjoy|prefer|adore|am (?:really )?into)\s+(.+?)(?:\.|,|!|\s+(?:and|but|so|because))"
+    r"(?i)\b(?:I\s+)?(?:love|like|enjoy|prefer|adore|am (?:really )?into|liebe|genieße|bevorzuge|stehe auf|finde.{0,10}toll|finde.{0,10}super|finde.{0,10}gut)\s+(.+?)(?:\.|,|!|\s+(?:and|but|so|because|und|aber|weil|da))"
 );
 lazy_regex!(
     DISLIKE_PATTERN,
-    r"(?i)\b(?:I\s+)?(?:hate|dislike|don't like|can't stand|avoid)\s+(.+?)(?:\.|,|!|\s+(?:and|but|so|because))"
+    r"(?i)\b(?:I\s+)?(?:hate|dislike|don't like|can't stand|avoid|hasse|mag nicht|kann nicht ausstehen|vermeide|nervt mich|nervt)\s+(.+?)(?:\.|,|!|\s+(?:and|but|so|because|und|aber|weil|da))"
 );
 lazy_regex!(
     FAV_PATTERN,
-    r"(?i)\bmy favorite\s+(.+?)\s+(?:is|are)\s+(.+?)(?:\.|,|$)"
+    r"(?i)\b(?:my favorite|mein(?:e)? (?:lieblings|favorit))\s*[-–]?\s*(.+?)\s+(?:is|are|ist|sind)\s+(.+?)(?:\.|,|$)"
 );
 lazy_regex!(
     DECISION_PATTERN,
-    r"(?i)\b(?:I\s+)?(?:decided to|chose to|going to|switched to|opted for|picked|went with)\s+(.+?)(?:\.|,|!|$)"
+    r"(?i)\b(?:I\s+)?(?:decided to|chose to|going to|switched to|opted for|picked|went with|habe (?:mich )?entschieden|entscheide mich|wechsle?(?:n)? zu|habe gewählt|bin (?:jetzt )?bei|nutze? (?:jetzt )?)[\s,]+(.+?)(?:\.|,|!|$)"
 );
 lazy_regex!(
     IDENTITY_PATTERN,
-    r"(?i)\b(?:I\s+)?(?:am a|'m a|consider myself|identify as)\s+(.+?)(?:\.|,|!|$)"
+    r"(?i)\b(?:I\s+)?(?:am a|'m a|consider myself|identify as|bin (?:ein(?:e)?|der|die|das)|sehe mich als|bezeichne mich als|arbeite als|bin von Beruf)\s+(.+?)(?:\.|,|!|$)"
 );
 lazy_regex!(
     VALUE_PATTERN,
-    r"(?i)\b(?:important to me|matters to me|I believe in|I value|I care about)\s+(.+?)(?:\.|,|!|$)"
+    r"(?i)\b(?:important to me|matters to me|I believe in|I value|I care about|bedeutet mir|glaube an|schätze|mir liegt|schätze sehr)\s+(.+?)(?:\.|,|!|$)"
 );
 lazy_regex!(
     MOTIVATION_PATTERN,
-    r"(?i)\b(?:I want to|my goal is|I aspire to|I'm trying to|I hope to|I aim to)\s+(.+?)(?:\.|,|!|$)"
+    r"(?i)\b(?:I want to|my goal is|I aspire to|I'm trying to|I hope to|I aim to|möchte|will|mein Ziel ist|strebe (?:danach|an)|versuche|hoffe zu|plane)\s+(.+?)(?:\.|,|!|$)"
 );
 
 // ============================================================================
@@ -381,6 +543,13 @@ fn clean_subject(raw: &str) -> String {
         .or_else(|| trimmed.strip_prefix("the "))
         .or_else(|| trimmed.strip_prefix("my "))
         .or_else(|| trimmed.strip_prefix("our "))
+        .or_else(|| trimmed.strip_prefix("der "))
+        .or_else(|| trimmed.strip_prefix("die "))
+        .or_else(|| trimmed.strip_prefix("das "))
+        .or_else(|| trimmed.strip_prefix("ein "))
+        .or_else(|| trimmed.strip_prefix("eine "))
+        .or_else(|| trimmed.strip_prefix("mein "))
+        .or_else(|| trimmed.strip_prefix("meine "))
         .unwrap_or(trimmed);
     let chars: String = stripped.chars().take(200).collect();
     chars
@@ -1476,6 +1645,99 @@ mod tests {
     fn test_short_content_no_extraction() {
         let signals = extract_signals_template("Hi.");
         assert!(signals.is_empty());
+    }
+
+    #[test]
+    fn test_german_like_pattern() {
+        let signals = extract_signals_template("Ich liebe Rust wirklich sehr.");
+        let pref = signals
+            .iter()
+            .find(|s| s.signal_type == SignalType::Preference);
+        assert!(
+            pref.is_some(),
+            "German 'liebe' should yield a preference signal"
+        );
+        assert_eq!(pref.unwrap().valence, Valence::Positive);
+    }
+
+    #[test]
+    fn test_german_dislike_pattern() {
+        let signals = extract_signals_template("Ich mag nicht früh aufstehen.");
+        let pref = signals
+            .iter()
+            .find(|s| s.signal_type == SignalType::Preference && s.valence == Valence::Negative);
+        assert!(
+            pref.is_some(),
+            "German 'mag nicht' should yield a negative preference signal"
+        );
+    }
+
+    #[test]
+    fn test_german_decision_pattern() {
+        let signals = extract_signals_template("Ich habe mich entschieden, auf Linux zu wechseln.");
+        let decision = signals
+            .iter()
+            .find(|s| s.signal_type == SignalType::Decision);
+        assert!(
+            decision.is_some(),
+            "German decision phrase should be detected"
+        );
+    }
+
+    #[test]
+    fn test_german_identity_pattern() {
+        let signals = extract_signals_template("Ich bin ein Softwareentwickler.");
+        let identity = signals
+            .iter()
+            .find(|s| s.signal_type == SignalType::Identity);
+        assert!(
+            identity.is_some(),
+            "German 'ich bin ein' should yield an identity signal"
+        );
+    }
+
+    #[test]
+    fn test_german_emotion_keywords() {
+        let signals = extract_signals_template("Ich bin heute sehr begeistert und motiviert.");
+        let emotion = signals
+            .iter()
+            .find(|s| s.signal_type == SignalType::Emotion);
+        assert!(
+            emotion.is_some(),
+            "German emotion keyword should be detected"
+        );
+        assert_eq!(emotion.unwrap().valence, Valence::Positive);
+    }
+
+    #[test]
+    fn test_german_negative_emotion() {
+        let signals = extract_signals_template("Ich bin total frustriert und erschöpft heute.");
+        let emotion = signals
+            .iter()
+            .find(|s| s.signal_type == SignalType::Emotion && s.valence == Valence::Negative);
+        assert!(
+            emotion.is_some(),
+            "German negative emotion should be detected"
+        );
+    }
+
+    #[test]
+    fn test_german_motivation_pattern() {
+        let signals = extract_signals_rule_based("Ich möchte Rust lernen und eigene Tools bauen.");
+        let motivation = signals
+            .iter()
+            .find(|s| s.signal_type == SignalType::Motivation);
+        assert!(
+            motivation.is_some(),
+            "German 'möchte' should yield a motivation signal"
+        );
+    }
+
+    #[test]
+    fn test_german_value_pattern() {
+        let signals = extract_signals_rule_based("Ich schätze Open Source und Transparenz.");
+        let value = signals.iter().find(|s| s.signal_type == SignalType::Value);
+        assert!(value.is_some(), "German value phrase should be detected");
     }
 
     #[test]
