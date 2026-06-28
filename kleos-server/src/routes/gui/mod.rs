@@ -1133,11 +1133,21 @@ async fn serve_music_file(State(state): State<AppState>, Path(file): Path<String
     let Some(dir) = state.config.gui_music_dir.as_ref() else {
         return (StatusCode::NOT_FOUND, "no music").into_response();
     };
-    if !file.to_ascii_lowercase().ends_with(".mp3") {
+    // Accept only a bare .mp3 filename. The strict character allowlist rejects
+    // path separators, parent-dir segments, and any other character, so the
+    // user-supplied value cannot escape the configured music directory.
+    let valid = file.len() <= 255
+        && file.to_ascii_lowercase().ends_with(".mp3")
+        && !file.contains("..")
+        && file
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
+    if !valid {
         return (StatusCode::NOT_FOUND, "not found").into_response();
     }
     let root = std::path::Path::new(dir);
-    let full = root.join(file.trim_start_matches('/'));
+    let full = root.join(&file);
+    // Defense in depth: the resolved path must still resolve inside the dir.
     let (Ok(canonical), Ok(root_canonical)) = (full.canonicalize(), root.canonicalize()) else {
         return (StatusCode::NOT_FOUND, "not found").into_response();
     };
