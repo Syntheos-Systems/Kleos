@@ -7,7 +7,9 @@ import { Spinner } from '../../ui/Spinner';
 
 // Render the pending-memory inbox with approve / reject / edit actions.
 export function Inbox() {
+  // React Query client used to invalidate stale caches after mutations.
   const queryClient = useQueryClient();
+  // Fetch up to 50 pending inbox items.
   const inbox = useQuery({ queryFn: () => getInbox(50), queryKey: ['mem', 'inbox'] });
 
   // Invalidate the inbox and the timeline list after any action.
@@ -18,11 +20,14 @@ export function Inbox() {
 
   // Wrap in a lambda so only the id is forwarded -- useMutation injects a
   // second context argument that the spy in tests would otherwise see.
+  // Mutation to approve a pending inbox item by id.
   const approve = useMutation({ mutationFn: (id: number) => approveInbox(id), onSuccess: invalidate });
+  // Mutation to reject a pending inbox item with an optional reason.
   const reject = useMutation({
     mutationFn: (vars: { id: number; reason?: string }) => rejectInbox(vars.id, vars.reason),
     onSuccess: invalidate
   });
+  // Mutation to update the content of a pending inbox item.
   const edit = useMutation({
     mutationFn: (vars: { id: number; content: string }) => editInbox(vars.id, vars.content),
     onSuccess: invalidate
@@ -30,6 +35,9 @@ export function Inbox() {
 
   if (inbox.isLoading) {
     return <Spinner />;
+  }
+  if (inbox.isError) {
+    return <EmptyState message="Failed to load inbox. Try refreshing." />;
   }
   if (!inbox.data?.length) {
     return <EmptyState message="Inbox empty." hint="Pending memories awaiting review appear here." />;
@@ -44,6 +52,7 @@ export function Inbox() {
           onApprove={() => approve.mutate(item.id)}
           onReject={(reason) => reject.mutate({ id: item.id, reason })}
           onEdit={(content) => edit.mutate({ id: item.id, content })}
+          // Global lock -- disables all actions while any mutation is in flight.
           busy={approve.isPending || reject.isPending || edit.isPending}
         />
       ))}
@@ -65,7 +74,9 @@ function InboxCard({
   onEdit: (content: string) => void;
   busy: boolean;
 }) {
+  // Whether the inline editor is currently open.
   const [editing, setEditing] = useState(false);
+  // Editable copy of the memory content while the editor is open.
   const [draft, setDraft] = useState(item.content);
 
   return (

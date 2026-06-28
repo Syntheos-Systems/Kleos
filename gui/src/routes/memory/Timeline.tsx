@@ -10,24 +10,31 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 // Render the year -> month -> day -> memories drill-down.
 export function Timeline() {
+  // Currently selected year (null = year overview).
   const [year, setYear] = useState<number | null>(null);
+  // Currently selected month (null = month overview).
   const [month, setMonth] = useState<number | null>(null);
+  // Currently selected day (null = day overview).
   const [day, setDay] = useState<number | null>(null);
 
+  // Fetch the list of years that contain memories.
   const years = useQuery({
     queryFn: () => getCalendar('year'),
     queryKey: ['mem', 'cal', 'year']
   });
+  // Fetch month buckets for the selected year.
   const months = useQuery({
     enabled: year !== null,
     queryFn: () => getCalendar('month', year!),
     queryKey: ['mem', 'cal', 'month', year]
   });
+  // Fetch day buckets for the selected year and month.
   const days = useQuery({
     enabled: year !== null && month !== null,
     queryFn: () => getCalendar('day', year!, month!),
     queryKey: ['mem', 'cal', 'day', year, month]
   });
+  // Fetch individual memories for the selected year, month, and day.
   const memories = useQuery({
     enabled: year !== null && month !== null && day !== null,
     queryFn: () => listMemoriesByDay(year!, month!, day!),
@@ -40,7 +47,11 @@ export function Timeline() {
   const dayCount = (d: number) =>
     Number(days.data?.find((b) => Number(b.bucket) === d)?.count ?? 0);
 
+  // Total number of days in the currently selected month.
   const daysInMonth = year !== null && month !== null ? new Date(year, month, 0).getDate() : 0;
+
+  // Surface a top-level error instead of an empty/misleading year view.
+  if (years.isError) return <EmptyState message="Failed to load timeline. Try refreshing." />;
 
   return (
     <div className="memory-view">
@@ -90,6 +101,8 @@ export function Timeline() {
       {year !== null && month === null &&
         (months.isLoading ? (
           <Spinner />
+        ) : months.isError ? (
+          <EmptyState message="Failed to load. Try refreshing." />
         ) : (
           <FloatingCardField>
             {MONTHS.map((label, idx) => {
@@ -113,6 +126,8 @@ export function Timeline() {
       {year !== null && month !== null && day === null &&
         (days.isLoading ? (
           <Spinner />
+        ) : days.isError ? (
+          <EmptyState message="Failed to load. Try refreshing." />
         ) : (
           <FloatingCardField>
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => {
@@ -135,6 +150,8 @@ export function Timeline() {
       {day !== null &&
         (memories.isLoading ? (
           <Spinner />
+        ) : memories.isError ? (
+          <EmptyState message="Failed to load. Try refreshing." />
         ) : memories.data && memories.data.length > 0 ? (
           <div className="memory-list">
             {memories.data.map((m) => (
