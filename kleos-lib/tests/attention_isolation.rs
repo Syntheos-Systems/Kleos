@@ -252,3 +252,37 @@ async fn get_by_other_tenant_is_noop() {
     let result = get_note(&db, note.id, INTRUDER).await;
     assert!(result.is_err(), "intruder get must fail");
 }
+
+// --- Validation -------------------------------------------------------------
+
+#[tokio::test]
+async fn priority_out_of_range_is_rejected() {
+    let handle = one_db().await;
+    let db = handle.database();
+
+    for bad in [0i64, 11, -1, 999] {
+        let result = create_note(
+            &db,
+            CreateNoteRequest { content: "test".into(), priority: Some(bad) },
+            1,
+        )
+        .await;
+        assert!(result.is_err(), "priority {bad} must be rejected");
+    }
+}
+
+#[tokio::test]
+async fn priority_boundaries_are_accepted() {
+    let handle = one_db().await;
+    let db = handle.database();
+
+    for good in [1i64, 5, 10] {
+        create_note(
+            &db,
+            CreateNoteRequest { content: format!("prio {good}"), priority: Some(good) },
+            1,
+        )
+        .await
+        .unwrap_or_else(|e| panic!("priority {good} must be accepted: {e}"));
+    }
+}

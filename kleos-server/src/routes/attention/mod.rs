@@ -39,7 +39,7 @@ async fn list_notes(
     ResolvedDb(db): ResolvedDb,
     Query(params): Query<ListParams>,
 ) -> Result<Json<Value>, AppError> {
-    let limit = params.limit.unwrap_or(50).min(200);
+    let limit = params.limit.unwrap_or(50).clamp(1, 200);
     let notes = attention::list_notes(&db, auth.effective_user_id(), limit).await?;
     Ok(Json(json!({ "notes": notes, "count": notes.len() })))
 }

@@ -26,9 +26,17 @@ pub struct UpdateNoteRequest {
     pub priority: Option<i64>,
 }
 
+fn validated_priority(p: i64) -> Result<i64> {
+    if (1..=10).contains(&p) {
+        Ok(p)
+    } else {
+        Err(EngError::InvalidInput(format!("priority must be 1–10, got {p}")))
+    }
+}
+
 #[tracing::instrument(skip(db, req), fields(priority = ?req.priority))]
 pub async fn create_note(db: &Database, req: CreateNoteRequest, user_id: i64) -> Result<AttentionNote> {
-    let priority = req.priority.unwrap_or(5);
+    let priority = validated_priority(req.priority.unwrap_or(5))?;
     let id = db
         .write(move |conn| {
             conn.execute(
@@ -80,6 +88,9 @@ pub async fn get_note(db: &Database, id: i64, user_id: i64) -> Result<AttentionN
 
 #[tracing::instrument(skip(db, req))]
 pub async fn update_note(db: &Database, id: i64, req: UpdateNoteRequest, user_id: i64) -> Result<AttentionNote> {
+    if let Some(p) = req.priority {
+        validated_priority(p)?;
+    }
     db.write(move |conn| {
         let mut sets = vec!["updated_at = datetime('now')".to_string()];
         let mut vals: Vec<rusqlite::types::Value> = Vec::new();

@@ -109,6 +109,30 @@ async fn delete_unknown_id_returns_404() {
 }
 
 #[tokio::test]
+async fn negative_limit_is_clamped_to_one() {
+    let (app, _state, _tmp) = test_app_with_sharding().await;
+    let key = bootstrap_admin_key(&app).await;
+
+    post(&app, "/attention", &key, json!({ "content": "a note" })).await;
+
+    // ?limit=-1 must not bypass the cap and return an unbounded result set.
+    let (status, body) = get(&app, "/attention?limit=-1", &key).await;
+    assert!(status.is_success(), "list with negative limit: {body}");
+    // returns at most 1 row (clamped), not the full table
+    let notes = body["notes"].as_array().expect("notes array");
+    assert!(notes.len() <= 1, "negative limit must be clamped, got {} notes", notes.len());
+}
+
+#[tokio::test]
+async fn priority_out_of_range_returns_error() {
+    let (app, _state, _tmp) = test_app_with_sharding().await;
+    let key = bootstrap_admin_key(&app).await;
+
+    let (status, _body) = post(&app, "/attention", &key, json!({ "content": "bad prio", "priority": 999 })).await;
+    assert!(status.is_client_error(), "priority 999 must be rejected, got {status}");
+}
+
+#[tokio::test]
 async fn list_sorted_by_priority_descending() {
     let (app, _state, _tmp) = test_app_with_sharding().await;
     let key = bootstrap_admin_key(&app).await;

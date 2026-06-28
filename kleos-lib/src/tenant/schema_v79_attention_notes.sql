@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS attention_notes (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL,
     content     TEXT NOT NULL,
-    priority    INTEGER NOT NULL DEFAULT 5,
+    priority    INTEGER NOT NULL DEFAULT 5 CHECK (priority BETWEEN 1 AND 10),
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
