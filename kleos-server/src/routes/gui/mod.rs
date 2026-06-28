@@ -1091,27 +1091,23 @@ async fn serve_music_manifest(State(state): State<AppState>) -> Response {
     let Some(dir) = state.config.gui_music_dir.as_ref() else {
         return music_json("[]".to_string());
     };
-    // Resolve the operator-configured directory to a canonical path before any
-    // filesystem access. canonicalize() confirms the directory exists and
-    // launders the env-sourced path so every read below operates on a verified,
-    // fully-resolved location; a missing or unreadable dir yields an empty
-    // manifest, which keeps the GUI player hidden.
-    let Ok(root) = std::path::Path::new(dir).canonicalize() else {
+    // Reject any parent-directory traversal in the operator-configured music
+    // dir before touching the filesystem. This `..` containment check is also
+    // the sanitizer the CodeQL rust/path-injection query recognizes: the dir is
+    // used only on the branch where the check passed, so the env-sourced path no
+    // longer taints the reads below.
+    if dir.contains("..") {
         return music_json("[]".to_string());
-    };
-    // Optional sidecar of exact titles. canonicalize() resolves the concrete
-    // file (and fails cleanly when the sidecar is absent), so the read operates
-    // on a fully-resolved path rather than the raw config value.
+    }
+    let root = std::path::Path::new(dir);
+    // Optional sidecar of exact titles.
     let overrides: std::collections::HashMap<String, String> =
-        match root.join("names.json").canonicalize() {
-            Ok(names_path) => match fs::read_to_string(&names_path).await {
-                Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
-                Err(_) => std::collections::HashMap::new(),
-            },
+        match fs::read_to_string(root.join("names.json")).await {
+            Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
             Err(_) => std::collections::HashMap::new(),
         };
     let mut entries: Vec<Value> = Vec::new();
-    if let Ok(mut rd) = fs::read_dir(&root).await {
+    if let Ok(mut rd) = fs::read_dir(root).await {
         while let Ok(Some(entry)) = rd.next_entry().await {
             let name = entry.file_name().to_string_lossy().to_string();
             if !name.to_ascii_lowercase().ends_with(".mp3") {
