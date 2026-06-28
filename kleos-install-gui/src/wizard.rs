@@ -37,6 +37,8 @@ pub enum WizardStep {
     Security,
     /// System service integration (systemd / launchd / none).
     SystemIntegration,
+    /// Advanced (expert) server toggles.
+    Advanced,
     /// Plan summary and installation trigger.
     Summary,
 }
@@ -51,6 +53,7 @@ impl WizardStep {
             WizardStep::Embeddings => "Embeddings",
             WizardStep::Security => "Security",
             WizardStep::SystemIntegration => "System",
+            WizardStep::Advanced => "Advanced",
             WizardStep::Summary => "Install",
         }
     }
@@ -63,6 +66,7 @@ impl WizardStep {
             WizardStep::Embeddings,
             WizardStep::Security,
             WizardStep::SystemIntegration,
+            WizardStep::Advanced,
             WizardStep::Summary,
         ]
     }
@@ -168,6 +172,10 @@ pub struct InstallerApp {
     // -- UI transient state --
     /// Whether the "are you sure you want to quit?" confirmation is visible.
     pub show_quit_confirm: bool,
+
+    // -- Advanced toggles --
+    /// Expert toggles collected on the Advanced step, folded into the plan.
+    pub advanced: steps::advanced::AdvancedToggles,
 }
 
 /// Construction, per-step rendering, and plan assembly for the GUI app.
@@ -230,6 +238,7 @@ impl InstallerApp {
             install_progress_channel: Arc::new(Mutex::new(Vec::new())),
             install_result: None,
             show_quit_confirm: false,
+            advanced: steps::advanced::AdvancedToggles::default(),
         }
     }
 
@@ -341,7 +350,7 @@ impl InstallerApp {
                 None
             },
             security: self.security_config.clone(),
-            overrides: kleos_install_core::config::ConfigOverrides::default(),
+            overrides: self.advanced.to_overrides(),
         };
 
         InstallPlan {
@@ -396,6 +405,7 @@ impl eframe::App for InstallerApp {
                 WizardStep::Embeddings => steps::embeddings::draw_embeddings(ui, self),
                 WizardStep::Security => steps::security::draw_security(ui, self),
                 WizardStep::SystemIntegration => steps::system::draw_system_integration(ui, self),
+                WizardStep::Advanced => steps::advanced::draw_advanced(ui, self),
                 WizardStep::Summary => steps::summary::draw_summary(ui, self),
             });
         });
