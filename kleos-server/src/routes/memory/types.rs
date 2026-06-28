@@ -38,6 +38,16 @@ pub(super) struct ListQuery {
     pub space_id: Option<i64>,
     pub include_forgotten: Option<bool>,
     pub include_archived: Option<bool>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+}
+
+/// Query params for GET /memories/calendar.
+#[derive(Debug, Deserialize)]
+pub(super) struct CalendarQuery {
+    pub granularity: String,
+    pub year: Option<i32>,
+    pub month: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -485,6 +485,10 @@ pub struct ListOptions {
     pub space_id: Option<i64>,
     pub include_forgotten: bool,
     pub include_archived: bool,
+    /// Inclusive lower bound on created_at (YYYY-MM-DD), or None.
+    pub from: Option<String>,
+    /// Exclusive upper bound on created_at (YYYY-MM-DD), or None.
+    pub to: Option<String>,
 }
 impl Default for ListOptions {
     fn default() -> Self {
@@ -497,6 +501,8 @@ impl Default for ListOptions {
             space_id: None,
             include_forgotten: false,
             include_archived: false,
+            from: None,
+            to: None,
         }
     }
 }
