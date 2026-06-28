@@ -92,32 +92,15 @@ pub async fn update_note(db: &Database, id: i64, req: UpdateNoteRequest, user_id
         validated_priority(p)?;
     }
     db.write(move |conn| {
-        let mut sets = vec!["updated_at = datetime('now')".to_string()];
-        let mut vals: Vec<rusqlite::types::Value> = Vec::new();
-        let mut idx = 1usize;
-
-        if let Some(c) = &req.content {
-            sets.push(format!("content = ?{idx}"));
-            vals.push(rusqlite::types::Value::Text(c.clone()));
-            idx += 1;
-        }
-        if let Some(p) = req.priority {
-            sets.push(format!("priority = ?{idx}"));
-            vals.push(rusqlite::types::Value::Integer(p));
-            idx += 1;
-        }
-
-        let id_idx = idx;
-        vals.push(rusqlite::types::Value::Integer(id));
-        let user_idx = idx + 1;
-        vals.push(rusqlite::types::Value::Integer(user_id));
-
-        let sql = format!(
-            "UPDATE attention_notes SET {} WHERE id = ?{id_idx} AND user_id = ?{user_idx}",
-            sets.join(", ")
-        );
         let changed = conn
-            .execute(&sql, rusqlite::params_from_iter(vals.iter().cloned()))
+            .execute(
+                "UPDATE attention_notes
+                 SET content    = COALESCE(?1, content),
+                     priority   = COALESCE(?2, priority),
+                     updated_at = datetime('now')
+                 WHERE id = ?3 AND user_id = ?4",
+                params![req.content, req.priority, id, user_id],
+            )
             .map_err(EngError::Database)?;
         if changed == 0 {
             return Err(EngError::NotFound(format!("attention note {id} not found")));
