@@ -125,6 +125,28 @@ pub struct InstallerConfig {
     pub reranker: Option<RerankerConfig>,
     /// Security secrets -- always required.
     pub security: SecurityConfig,
+    /// Free-form overrides layered on top of the curated wizard values. This is
+    /// what gives full coverage of the server's config surface (every field,
+    /// not just the curated few) from the CLI and config import.
+    pub overrides: ConfigOverrides,
+}
+
+/// Overrides that extend the curated wizard selection to the full config
+/// surface, populated from CLI flags (`--config-file`, `--set`, `--env`).
+#[derive(Debug, Clone, Default)]
+pub struct ConfigOverrides {
+    /// Optional base [`kleos_config::Config`] loaded from an existing
+    /// `engram.toml` (`--config-file`). When present it is authoritative: the
+    /// curated server/embedding/reranker mapping is skipped and only the dotted
+    /// `--set` overrides are layered on top. Secrets are never imported.
+    pub base: Option<kleos_config::Config>,
+    /// Dotted-key TOML overrides (`field=value`, e.g. `backup_enabled=true` or
+    /// `eidolon.enabled=true`) applied to the Config before serialization. Any
+    /// field in the schema, including nested ones, can be set this way.
+    pub toml_overrides: Vec<(String, String)>,
+    /// Extra raw `KEY=VALUE` lines appended verbatim to `.env`, for env-only
+    /// settings the curated wizard does not model (e.g. `KLEOS_GUI_PASSWORD`).
+    pub extra_env: Vec<(String, String)>,
 }
 
 /// Reject a config value that would corrupt the line-oriented `.env` format: a
@@ -178,16 +200,89 @@ fn write_with_mode(path: &Path, contents: &str, mode: u32) -> Result<(), Install
     }
 }
 
+/// Parse a raw `--set` value into a [`toml::Value`].
+///
+/// The value is first tried as a TOML scalar/array (so `true`, `42`, `1.5`,
+/// `"quoted"`, and `["a", "b"]` get their natural types); if that fails it is
+/// treated as a bare string, which lets unquoted values like an IP address or a
+/// path be passed without shell-quoting.
+fn parse_toml_scalar(raw: &str) -> toml::Value {
+    match format!("v = {raw}").parse::<toml::Value>() {
+        Ok(toml::Value::Table(mut t)) => t.remove("v").unwrap_or_else(|| raw.to_string().into()),
+        _ => raw.to_string().into(),
+    }
+}
+
+/// Set a dotted key path (`a.b.c`) within a [`toml::Value`] table, creating
+/// intermediate tables as needed. Returns `InstallError::Config` if a path
+/// segment collides with an existing non-table value.
+fn set_dotted(root: &mut toml::Value, key: &str, value: toml::Value) -> Result<(), InstallError> {
+    let segments: Vec<&str> = key.split('.').collect();
+    let mut cursor = root;
+    for seg in &segments[..segments.len() - 1] {
+        let table = cursor.as_table_mut().ok_or_else(|| {
+            InstallError::Config(format!("override key '{key}' descends into a non-table"))
+        })?;
+        cursor = table
+            .entry(seg.to_string())
+            .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+    }
+    let table = cursor.as_table_mut().ok_or_else(|| {
+        InstallError::Config(format!("override key '{key}' descends into a non-table"))
+    })?;
+    table.insert(segments[segments.len() - 1].to_string(), value);
+    Ok(())
+}
+
+/// Apply dotted-key `field=value` overrides onto a [`kleos_config::Config`].
+///
+/// The config is converted to a [`toml::Value`] tree, each override is inserted
+/// (creating nested tables as needed), then the tree is deserialized back into
+/// `Config`, which validates that every value fits its field type. Returns
+/// `InstallError::Config` on an unknown-shaped path or a type mismatch.
+fn apply_toml_overrides(
+    cfg: kleos_config::Config,
+    overrides: &[(String, String)],
+) -> Result<kleos_config::Config, InstallError> {
+    if overrides.is_empty() {
+        return Ok(cfg);
+    }
+    let mut value = toml::Value::try_from(&cfg)
+        .map_err(|e| InstallError::Config(format!("serialize config for override: {e}")))?;
+    for (key, raw) in overrides {
+        set_dotted(&mut value, key, parse_toml_scalar(raw))?;
+    }
+    value
+        .try_into()
+        .map_err(|e| InstallError::Config(format!("invalid --set override: {e}")))
+}
+
 /// Config-file generation: mapping wizard choices onto the real server schema
 /// and rendering the `engram.toml` / `.env` pair.
 impl InstallerConfig {
     /// Map the wizard-collected values onto a real [`kleos_config::Config`].
     ///
-    /// Every field the wizard does not collect keeps its server default, so the
-    /// emitted TOML is a complete, valid config. Secrets and env-only settings
-    /// (open access, CORS, remote credentials) are deliberately NOT placed here
-    /// -- they live in `.env` (see [`Self::generate_env`]).
-    fn to_kleos_config(&self) -> kleos_config::Config {
+    /// Layering order: an imported base config (if any) OR the curated wizard
+    /// values on top of server defaults, then the dotted `--set` overrides last.
+    /// When a base config is imported it is authoritative and the curated
+    /// mapping is skipped, so `--config-file foo.toml` reproduces exactly that
+    /// config (plus any `--set` tweaks). Secrets and env-only settings are NOT
+    /// placed here -- they live in `.env` (see [`Self::generate_env`]). Returns
+    /// `InstallError::Config` if a `--set` value does not fit its field type.
+    fn to_kleos_config(&self) -> Result<kleos_config::Config, InstallError> {
+        let mut c = match &self.overrides.base {
+            // Imported config is authoritative; skip the curated mapping.
+            Some(base) => base.clone(),
+            None => self.curated_config(),
+        };
+        c = apply_toml_overrides(c, &self.overrides.toml_overrides)?;
+        Ok(c)
+    }
+
+    /// Build a Config from server defaults plus the curated wizard selections
+    /// (server bind/storage, embedding, reranker). Used when no base config is
+    /// imported.
+    fn curated_config(&self) -> kleos_config::Config {
         let mut c = kleos_config::Config::default();
 
         if let Some(srv) = &self.server {
@@ -242,7 +337,7 @@ impl InstallerConfig {
     /// TOML when a table field precedes later scalars). Returns
     /// `InstallError::Config` if serialization fails.
     pub fn generate_toml(&self) -> Result<String, InstallError> {
-        let cfg = self.to_kleos_config();
+        let cfg = self.to_kleos_config()?;
         let value = toml::Value::try_from(&cfg)
             .map_err(|e| InstallError::Config(format!("serialize config to TOML value: {e}")))?;
         let body = toml::to_string(&value)
@@ -332,6 +427,11 @@ impl InstallerConfig {
             out.push_str(&format!("KLEOS_RERANKER_MODEL={}\n", env_value(model)?));
         }
 
+        // Extra env-only settings supplied via --env (e.g. KLEOS_GUI_PASSWORD).
+        for (key, val) in &self.overrides.extra_env {
+            out.push_str(&format!("{}={}\n", env_value(key)?, env_value(val)?));
+        }
+
         Ok(out)
     }
 
@@ -388,6 +488,7 @@ mod tests {
                 hmac_secret: "feedface".to_string(),
                 open_access: false,
             },
+            overrides: ConfigOverrides::default(),
         }
     }
 
@@ -454,6 +555,66 @@ mod tests {
         assert!(env_value("ok-value").is_ok());
         assert!(env_value("inject\nKEY=val").is_err());
         assert!(env_value("inject\rKEY=val").is_err());
+    }
+
+    // A --set override of a scalar, a bool, and a nested field must all land in
+    // the TOML with the right type and round-trip into Config.
+    #[test]
+    fn set_overrides_apply_to_any_field() {
+        let mut installer = sample_config();
+        installer.overrides.toml_overrides = vec![
+            ("reranker_top_k".to_string(), "50".to_string()),
+            ("backup_enabled".to_string(), "true".to_string()),
+            ("eidolon.enabled".to_string(), "true".to_string()),
+        ];
+        let toml = installer.generate_toml().expect("toml");
+        let cfg: kleos_config::Config = toml::from_str(&toml).expect("parse");
+        assert_eq!(cfg.reranker_top_k, 50);
+        assert!(cfg.backup_enabled);
+        assert!(cfg.eidolon.enabled);
+    }
+
+    // An imported base config is authoritative -- the curated defaults must not
+    // clobber it -- while --set still layers on top.
+    #[test]
+    fn imported_base_is_authoritative() {
+        let mut base = kleos_config::Config::default();
+        base.host = "10.0.0.5".to_string();
+        base.port = 9000;
+        base.backup_enabled = true;
+
+        let mut installer = sample_config();
+        installer.overrides.base = Some(base);
+        installer.overrides.toml_overrides = vec![("port".to_string(), "9999".to_string())];
+
+        let toml = installer.generate_toml().expect("toml");
+        let cfg: kleos_config::Config = toml::from_str(&toml).expect("parse");
+        // Curated host (0.0.0.0) must NOT override the imported base.
+        assert_eq!(cfg.host, "10.0.0.5");
+        assert!(cfg.backup_enabled);
+        // --set still wins over the base.
+        assert_eq!(cfg.port, 9999);
+    }
+
+    // A --set value that does not fit its field type is a clear error, not a
+    // silent default.
+    #[test]
+    fn set_override_type_mismatch_errors() {
+        let mut installer = sample_config();
+        installer.overrides.toml_overrides = vec![("port".to_string(), "not-a-number".to_string())];
+        assert!(installer.generate_toml().is_err());
+    }
+
+    // Extra env entries are appended verbatim to .env.
+    #[test]
+    fn extra_env_is_appended() {
+        let mut installer = sample_config();
+        installer.overrides.extra_env =
+            vec![("KLEOS_GUI_PASSWORD".to_string(), "hunter2".to_string())];
+        let env = installer
+            .generate_env(Path::new("/x/engram.toml"))
+            .expect("env");
+        assert!(env.contains("KLEOS_GUI_PASSWORD=hunter2"));
     }
 
     // Remote embedding routes url/key/dim to .env and keeps the dimension in the

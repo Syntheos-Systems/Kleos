@@ -243,6 +243,7 @@ fn build_installer_config(state: &WizardState) -> kleos_install_core::config::In
         embedding: state.embedding_config.clone(),
         reranker: state.reranker_config.clone(),
         security: state.security_config.clone(),
+        overrides: kleos_install_core::config::ConfigOverrides::default(),
     }
 }
 

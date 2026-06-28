@@ -5090,6 +5090,7 @@ dependencies = [
  "anyhow",
  "clap",
  "crossterm 0.28.1",
+ "kleos-config",
  "kleos-install-core",
  "rand 0.9.4",
  "ratatui 0.30.0",

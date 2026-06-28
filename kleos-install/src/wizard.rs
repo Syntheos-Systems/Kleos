@@ -53,6 +53,7 @@ pub enum WizardStep {
     Summary,
 }
 
+/// Step-ordering and display helpers for the TUI wizard flow.
 impl WizardStep {
     /// Return the short display label used in the step indicator bar.
     pub fn label(self) -> &'static str {
@@ -126,6 +127,7 @@ pub struct WizardState {
     pub is_upgrade: bool,
 }
 
+/// Construction and plan assembly for the TUI wizard's mutable state.
 impl WizardState {
     /// Build the initial wizard state from platform info and CLI overrides.
     ///
@@ -261,6 +263,7 @@ impl WizardState {
             embedding: self.embedding_config.clone(),
             reranker: self.reranker_config.clone(),
             security: self.security_config.clone(),
+            overrides: kleos_install_core::config::ConfigOverrides::default(),
         };
 
         InstallPlan {

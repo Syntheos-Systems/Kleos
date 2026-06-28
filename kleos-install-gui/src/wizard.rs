@@ -41,6 +41,7 @@ pub enum WizardStep {
     Summary,
 }
 
+/// Step-ordering and display helpers for the GUI wizard flow.
 impl WizardStep {
     /// Human-readable label shown in the step indicator bar.
     pub fn label(self) -> &'static str {
@@ -169,6 +170,7 @@ pub struct InstallerApp {
     pub show_quit_confirm: bool,
 }
 
+/// Construction, per-step rendering, and plan assembly for the GUI app.
 impl InstallerApp {
     /// Construct a new [`InstallerApp`] with sensible defaults.
     ///
@@ -339,6 +341,7 @@ impl InstallerApp {
                 None
             },
             security: self.security_config.clone(),
+            overrides: kleos_install_core::config::ConfigOverrides::default(),
         };
 
         InstallPlan {
@@ -362,6 +365,7 @@ impl InstallerApp {
     }
 }
 
+/// eframe entry point: drives one render frame of the installer per update.
 impl eframe::App for InstallerApp {
     /// Render the installer for one frame.
     ///
@@ -555,13 +559,16 @@ struct ChannelProgress {
     channel: Arc<Mutex<Vec<String>>>,
 }
 
+/// Forwards installer progress events into the shared log channel the GUI polls.
 impl kleos_install_core::InstallProgress for ChannelProgress {
+    /// Record the start of an installation phase.
     fn on_phase(&self, phase: &str, detail: &str) {
         if let Ok(mut ch) = self.channel.lock() {
             ch.push(format!("[{phase}] {detail}"));
         }
     }
 
+    /// Record a download progress percentage for a component.
     fn on_download_progress(&self, component: &str, bytes: u64, total: u64) {
         if let Some(pct) = (bytes * 100).checked_div(total) {
             if let Ok(mut ch) = self.channel.lock() {
@@ -570,18 +577,21 @@ impl kleos_install_core::InstallProgress for ChannelProgress {
         }
     }
 
+    /// Record that a component finished installing.
     fn on_component_installed(&self, component: &str) {
         if let Ok(mut ch) = self.channel.lock() {
             ch.push(format!("  Installed {component}"));
         }
     }
 
+    /// Record successful completion of the whole install.
     fn on_complete(&self) {
         if let Ok(mut ch) = self.channel.lock() {
             ch.push("Installation complete.".to_string());
         }
     }
 
+    /// Record a fatal installation error.
     fn on_error(&self, error: &kleos_install_core::InstallError) {
         if let Ok(mut ch) = self.channel.lock() {
             ch.push(format!("ERROR: {error}"));

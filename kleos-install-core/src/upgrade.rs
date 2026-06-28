@@ -153,6 +153,7 @@ pub fn read_existing_config(config_path: &Path) -> Result<InstallerConfig, Insta
         embedding: None,
         reranker,
         security,
+        overrides: crate::config::ConfigOverrides::default(),
     })
 }
 
