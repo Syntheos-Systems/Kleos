@@ -73,7 +73,7 @@ pub async fn get_note(db: &Database, id: i64, user_id: i64) -> Result<AttentionN
             "SELECT id, content, priority, created_at, updated_at
              FROM attention_notes WHERE id = ?1 AND user_id = ?2",
             params![id, user_id],
-            |row| row_to_note(row),
+            row_to_note,
         )
         .map_err(|e| {
             if e == rusqlite::Error::QueryReturnedNoRows {
