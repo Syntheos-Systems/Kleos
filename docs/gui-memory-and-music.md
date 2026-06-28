@@ -69,6 +69,16 @@ KLEOS_GUI_MUSIC_DIR=/home/operator/kleos-music kleos-server
 If the variable is unset or the directory is empty the player does not appear
 and no `/media/music/` routes are registered.
 
+### Access note
+
+The `/media/music/` routes are served same-origin without a per-request session
+check, the same way the static GUI assets are served. The content is
+operator-provided audio, so reachability is the trust boundary: bind the server
+to a trusted interface (or keep it behind your existing reverse proxy / VPN) if
+you do not want the audio enumerable by anyone who can reach the port. Only
+files ending in `.mp3` inside the configured directory are served, and path
+traversal outside that directory is rejected.
+
 ### Optional title sidecar
 
 By default the player shows the bare filename as the track title. To supply

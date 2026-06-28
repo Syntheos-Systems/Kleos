@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getMusicManifest, musicSrc } from '$lib/api/memory';
 import { MusicPlayer } from './MusicPlayer';
 
-// Mount the zanverse music player only when the server exposes tracks. The
+// Mount the ambient music player only when the server exposes tracks. The
 // manifest is empty unless KLEOS_GUI_MUSIC_DIR is configured, so the player
 // stays hidden for users who have not set up music.
 export function KleosMusic() {

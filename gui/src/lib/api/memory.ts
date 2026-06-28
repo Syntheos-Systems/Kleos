@@ -74,7 +74,7 @@ export async function rejectInbox(id: number, reason?: string): Promise<void> {
   await request(`/inbox/${id}/reject`, { body: reason ? { reason } : {}, method: 'POST' });
 }
 
-// Edit a pending inbox memory's content before approval.
+// Edit and approve a pending inbox memory in a single round-trip.
 export async function editInbox(id: number, content: string): Promise<void> {
   await request(`/inbox/${id}/edit`, { body: { content }, method: 'POST' });
 }
