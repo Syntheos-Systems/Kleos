@@ -1,0 +1,14 @@
+# Optional override: mount a local music directory into the GUI container.
+# Must be combined with docker/gui.yml.
+#
+# Usage:
+#   docker compose -f compose.yaml -f docker/gui.yml -f docker/music.yml up
+#
+# Set KLEOS_MUSIC_DIR in your .env to the host path containing your music files.
+
+services:
+  kleos:
+    volumes:
+      - ${KLEOS_MUSIC_DIR}:/music:ro
+    environment:
+      - KLEOS_GUI_MUSIC_DIR=/music

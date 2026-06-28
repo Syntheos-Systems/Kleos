@@ -1,0 +1,87 @@
+# Kleos — minimal stack (server + sidecar)
+#
+# Usage:
+#   docker compose up                                          # server + sidecar
+#   docker compose -f compose.yaml -f docker/gui.yml up       # server with web UI
+#   docker compose --profile full up                          # + credd + phylaxd
+#
+# Copy .env.example to .env and fill in the required values before starting.
+
+services:
+  kleos:
+    build:
+      context: .
+      target: runtime
+    image: kleos:latest
+    restart: unless-stopped
+    ports:
+      - "${KLEOS_BIND:-127.0.0.1}:${KLEOS_PORT:-4200}:4200"
+    volumes:
+      - ${KLEOS_DATA_DIR:-./data/kleos}:/data
+    environment:
+      - KLEOS_HOST=0.0.0.0
+      - KLEOS_DATA_DIR=/data
+      - KLEOS_DB_PATH=/data/kleos.db
+      - KLEOS_API_KEY=${KLEOS_API_KEY}
+      - KLEOS_BOOTSTRAP_SECRET=${KLEOS_BOOTSTRAP_SECRET}
+      - KLEOS_TENANT_MODE=${KLEOS_TENANT_MODE:-single}
+      - KLEOS_EMBEDDING_PROVIDER=${KLEOS_EMBEDDING_PROVIDER:-ollama}
+      - KLEOS_EMBEDDING_MODEL=${KLEOS_EMBEDDING_MODEL:-nomic-embed-text}
+      - KLEOS_OLLAMA_URL=${KLEOS_OLLAMA_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  sidecar:
+    build:
+      context: .
+      target: sidecar
+    image: kleos-sidecar:latest
+    restart: unless-stopped
+    ports:
+      - "${KLEOS_SIDECAR_BIND:-127.0.0.1}:${KLEOS_SIDECAR_PORT:-7711}:7711"
+    environment:
+      - KLEOS_SIDECAR_HOST=0.0.0.0
+      - KLEOS_URL=http://kleos:4200
+      - KLEOS_API_KEY=${KLEOS_API_KEY}
+      - KLEOS_SIDECAR_TOKEN=${KLEOS_SIDECAR_TOKEN}
+    depends_on:
+      kleos:
+        condition: service_healthy
+
+  # -- profile: full ----------------------------------------------------------
+  credd:
+    build:
+      context: .
+      target: credd
+    image: kleos-credd:latest
+    restart: unless-stopped
+    profiles: [full]
+    ports:
+      - "${CREDD_BIND:-127.0.0.1}:4400:4400"
+    environment:
+      - CREDD_LISTEN=0.0.0.0:4400
+      - CREDD_AUTH_MODE=${CREDD_AUTH_MODE:-password}
+      - CREDD_MASTER_PASSWORD=${CREDD_MASTER_PASSWORD}
+    volumes:
+      - ${KLEOS_DATA_DIR:-./data/kleos}:/data
+
+  phylaxd:
+    build:
+      context: .
+      target: phylaxd
+    image: kleos-phylaxd:latest
+    restart: unless-stopped
+    profiles: [full]
+    environment:
+      - CREDD_AUTH_MODE=${CREDD_AUTH_MODE:-password}
+      - CREDD_MASTER_PASSWORD=${CREDD_MASTER_PASSWORD}
+      - CREDD_DB_PATH=/data/kleos.db
+    volumes:
+      - ${KLEOS_DATA_DIR:-./data/kleos}:/data
+    depends_on:
+      - credd

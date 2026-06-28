@@ -1,7 +1,22 @@
 # syntax=docker/dockerfile:1
 
 # =============================================================================
-# Stage 1 -- builder
+# Stage 1a -- gui-builder  (skipped when building --target runtime)
+# Compiles the React/Vite frontend. Node.js is not needed in the final image.
+# =============================================================================
+FROM node:22-slim AS gui-builder
+
+WORKDIR /gui
+COPY gui/package.json ./
+# TODO: commit a package-lock.json and switch back to `npm ci` for
+# reproducible CI/release builds. Currently uses npm install because
+# gui/ has no standard lockfile (only frameshift.lock).
+RUN npm install
+COPY gui/ ./
+RUN npm run build
+
+# =============================================================================
+# Stage 1b -- builder
 # Compiles kleos-server and kleos-cli in release mode.
 # SQLCipher is vendored at compile time via the "sqlcipher" feature so no
 # system libsqlcipher is needed at runtime.
@@ -36,10 +51,12 @@ ENV CARGO_PROFILE_RELEASE_LTO=thin \
 # from other stages.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/build/target \
-    cargo build --release -p kleos-server -p kleos-cli -p kleos-sidecar \
+    cargo build --release -p kleos-server -p kleos-cli -p kleos-sidecar -p kleos-credd -p kleos-phylaxd \
     && cp target/release/kleos-server  /tmp/kleos-server \
     && cp target/release/kleos-cli     /tmp/kleos-cli \
-    && cp target/release/kleos-sidecar /tmp/kleos-sidecar
+    && cp target/release/kleos-sidecar /tmp/kleos-sidecar \
+    && cp target/release/kleos-credd   /tmp/kleos-credd \
+    && cp target/release/phylaxd       /tmp/phylaxd
 
 # =============================================================================
 # Stage 2 -- runtime
@@ -58,6 +75,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl3 \
     ca-certificates \
     libpcsclite1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a dedicated non-root user for running the server.
@@ -71,6 +89,9 @@ COPY --from=builder /tmp/kleos-server /usr/local/bin/kleos-server
 COPY --from=builder /tmp/kleos-cli   /usr/local/bin/kleos-cli
 
 RUN chmod 755 /usr/local/bin/kleos-server /usr/local/bin/kleos-cli
+
+# GUI bundle — only present in the `runtime-gui` target.
+# COPY --from=gui-builder /gui/build /app/gui/build
 
 # Legacy aliases for backward compatibility.
 RUN ln -s /usr/local/bin/kleos-server /usr/local/bin/engram-server \
@@ -89,6 +110,16 @@ VOLUME ["/data"]
 EXPOSE 4200
 
 CMD ["/usr/local/bin/kleos-server"]
+
+# =============================================================================
+# Stage 2b -- runtime-gui
+# Extends runtime with the pre-built React frontend.
+# Build: docker build --target runtime-gui -t kleos:gui .
+# =============================================================================
+FROM runtime AS runtime-gui
+
+COPY --from=gui-builder /gui/build /app/gui/build
+ENV KLEOS_GUI_BUILD_DIR=/app/gui/build
 
 # =============================================================================
 # Stage 3 -- sidecar runtime
@@ -124,3 +155,51 @@ ENV KLEOS_SIDECAR_HOST=0.0.0.0
 EXPOSE 7711
 
 CMD ["/usr/local/bin/kleos-sidecar"]
+
+# =============================================================================
+# Stage 4 -- credd runtime
+# Credential daemon — manages secrets and API key resolution.
+# =============================================================================
+FROM debian:bookworm-slim AS credd
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 \
+    ca-certificates \
+    libpcsclite1 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system --gid 1000 kleos \
+    && useradd --system --uid 1000 --gid kleos --no-create-home --shell /sbin/nologin kleos
+
+COPY --from=builder /tmp/kleos-credd /usr/local/bin/kleos-credd
+RUN chmod 755 /usr/local/bin/kleos-credd
+
+USER kleos
+
+ENV CREDD_LISTEN=0.0.0.0:4400
+
+EXPOSE 4400
+
+CMD ["/usr/local/bin/kleos-credd"]
+
+# =============================================================================
+# Stage 5 -- phylaxd runtime
+# Phylax security daemon — approval gating and policy enforcement.
+# =============================================================================
+FROM debian:bookworm-slim AS phylaxd
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 \
+    ca-certificates \
+    libpcsclite1 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --system --gid 1000 kleos \
+    && useradd --system --uid 1000 --gid kleos --no-create-home --shell /sbin/nologin kleos
+
+COPY --from=builder /tmp/phylaxd /usr/local/bin/phylaxd
+RUN chmod 755 /usr/local/bin/phylaxd
+
+USER kleos
+
+CMD ["/usr/local/bin/phylaxd"]

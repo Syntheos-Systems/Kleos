@@ -1,0 +1,15 @@
+# GUI override — swaps the kleos service to the runtime-gui image.
+#
+# Usage:
+#   docker compose -f compose.yaml -f docker/gui.yml up
+#
+# Requires KLEOS_GUI_PASSWORD in your .env to enable the web interface.
+
+services:
+  kleos:
+    build:
+      target: runtime-gui
+    image: kleos:gui
+    environment:
+      - KLEOS_GUI_BUILD_DIR=/app/gui/build
+      - KLEOS_GUI_PASSWORD=${KLEOS_GUI_PASSWORD}
