@@ -764,6 +764,8 @@ async fn recall(
         space_id: body.space_id,
         include_forgotten: false,
         include_archived: false,
+        from: None,
+        to: None,
     };
     let recent_extra = memory::list(&db, recent_extra_opts).await?;
     let recent_items: Vec<Value> = recent_extra
@@ -1056,6 +1058,8 @@ async fn synthesize_profile(
             space_id: None,
             include_forgotten: false,
             include_archived: true,
+            from: None,
+            to: None,
         },
     )
     .await?;
