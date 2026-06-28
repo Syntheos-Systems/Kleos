@@ -578,10 +578,12 @@ mod tests {
     // clobber it -- while --set still layers on top.
     #[test]
     fn imported_base_is_authoritative() {
-        let mut base = kleos_config::Config::default();
-        base.host = "10.0.0.5".to_string();
-        base.port = 9000;
-        base.backup_enabled = true;
+        let base = kleos_config::Config {
+            host: "10.0.0.5".to_string(),
+            port: 9000,
+            backup_enabled: true,
+            ..kleos_config::Config::default()
+        };
 
         let mut installer = sample_config();
         installer.overrides.base = Some(base);
