@@ -883,14 +883,21 @@ async fn calendar(
     ResolvedDb(db): ResolvedDb,
     Query(q): Query<CalendarQuery>,
 ) -> Result<Json<Value>, AppError> {
-    let buckets =
-        memory::calendar_counts(&db, auth.effective_user_id(), &q.granularity, q.year, q.month)
-            .await?;
+    let buckets = memory::calendar_counts(
+        &db,
+        auth.effective_user_id(),
+        &q.granularity,
+        q.year,
+        q.month,
+    )
+    .await?;
     let out: Vec<Value> = buckets
         .into_iter()
         .map(|(bucket, count)| json!({ "bucket": bucket, "count": count }))
         .collect();
-    Ok(Json(json!({ "buckets": out, "granularity": q.granularity })))
+    Ok(Json(
+        json!({ "buckets": out, "granularity": q.granularity }),
+    ))
 }
 
 /// GET /memory/{id} -- fetch a single memory by id.

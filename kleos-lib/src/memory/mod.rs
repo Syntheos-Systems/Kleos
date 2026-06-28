@@ -880,7 +880,8 @@ pub async fn calendar_counts(
                           AND is_latest = 1 AND is_consolidated = 0";
 
     // Resolve the grouping expression and any extra time-scoping clauses.
-    let (group_expr, extra, params): (&str, String, Vec<rusqlite::types::Value>) = match granularity {
+    let (group_expr, extra, params): (&str, String, Vec<rusqlite::types::Value>) = match granularity
+    {
         "year" => (
             "strftime('%Y', created_at)",
             String::new(),
@@ -2394,7 +2395,11 @@ mod tests {
     async fn calendar_counts_groups_by_year() {
         use rusqlite::params;
         let db = Database::connect_memory().await.expect("in-mem db");
-        for ts in ["2025-06-01 09:00:00", "2026-03-14 12:00:00", "2026-08-02 18:00:00"] {
+        for ts in [
+            "2025-06-01 09:00:00",
+            "2026-03-14 12:00:00",
+            "2026-08-02 18:00:00",
+        ] {
             db.write(move |conn| {
                 conn.execute(
                     "INSERT INTO memories (content, category, source, importance, confidence, \
@@ -2407,7 +2412,12 @@ mod tests {
             .await
             .expect("seed");
         }
-        let buckets = calendar_counts(&db, 1, "year", None, None).await.expect("calendar");
-        assert_eq!(buckets, vec![("2026".to_string(), 2), ("2025".to_string(), 1)]);
+        let buckets = calendar_counts(&db, 1, "year", None, None)
+            .await
+            .expect("calendar");
+        assert_eq!(
+            buckets,
+            vec![("2026".to_string(), 2), ("2025".to_string(), 1)]
+        );
     }
 }
