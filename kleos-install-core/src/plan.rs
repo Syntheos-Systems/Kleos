@@ -65,7 +65,7 @@ pub struct InstallResult {
     pub installed_components: Vec<String>,
     /// Directory where the binaries were placed.
     pub install_dir: PathBuf,
-    /// Path to the written `engram.toml` file.
+    /// Path to the written `kleos.toml` file.
     pub config_path: PathBuf,
     /// The initial API key generated for the first user.
     pub api_key: String,
@@ -110,7 +110,7 @@ impl InstallPlan {
     /// 3. Download each selected component binary.
     /// 4. Verify checksums for all downloaded files.
     /// 5. Move binaries to `install_dir` and set executable permissions on Unix.
-    /// 6. Write `engram.toml` and `.env` to `config_dir`.
+    /// 6. Write `kleos.toml` and `.env` to `config_dir`.
     /// 7. Install system integration (systemd unit, launchd plist, or nothing).
     /// 8. Return an `InstallResult` summarising the completed installation.
     ///
@@ -213,7 +213,7 @@ impl InstallPlan {
         let result = InstallResult {
             installed_components: self.components.clone(),
             install_dir: self.install_dir.clone(),
-            config_path: self.config_dir.join("engram.toml"),
+            config_path: self.config_dir.join("kleos.toml"),
             api_key: self.config.security.initial_api_key.clone(),
             server_url,
         };

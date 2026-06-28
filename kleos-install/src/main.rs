@@ -53,7 +53,7 @@ struct Args {
     #[arg(long = "env", value_name = "KEY=VALUE")]
     env: Vec<String>,
 
-    /// Seed configuration from an existing engram.toml before applying overrides
+    /// Seed configuration from an existing kleos.toml before applying overrides
     /// (non-interactive). The imported file is authoritative for config fields.
     #[arg(long, value_name = "PATH")]
     config_file: Option<std::path::PathBuf>,

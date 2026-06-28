@@ -2,8 +2,8 @@
 //!
 //! Exposes the commonly-flipped server toggles -- background workers, retrieval
 //! channels, backups, rate limiting, open access -- as a navigable list so a
-//! user does not have to hand-edit `engram.toml` after install. Anything not
-//! listed here is still settable: the generated `engram.toml` already contains
+//! user does not have to hand-edit `kleos.toml` after install. Anything not
+//! listed here is still settable: the generated `kleos.toml` already contains
 //! every field at its default, and the non-interactive CLI accepts
 //! `--set field=value` for the full surface. Curated values that the user
 //! changes are emitted as overrides; unchanged ones are left at their default.
@@ -236,7 +236,7 @@ pub fn draw_advanced_step(
 ) {
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(Span::styled(
-        "Optional advanced toggles -- every other setting lives in the generated engram.toml.",
+        "Optional advanced toggles -- every other setting lives in the generated kleos.toml.",
         Style::default().fg(COLOR_DIM),
     )));
     lines.push(Line::from(""));

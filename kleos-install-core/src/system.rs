@@ -35,7 +35,7 @@ pub fn generate_systemd_unit(
 ) -> String {
     let binary = install_dir.join("kleos-server");
     let env_file = config_dir.join(".env");
-    let toml_file = config_dir.join("engram.toml");
+    let toml_file = config_dir.join("kleos.toml");
 
     format!(
         r#"[Unit]
@@ -76,7 +76,7 @@ pub fn generate_launchd_plist(
     config_dir: &Path,
 ) -> Result<String, InstallError> {
     let binary = install_dir.join("kleos-server");
-    let toml_file = config_dir.join("engram.toml");
+    let toml_file = config_dir.join("kleos.toml");
     // Prefer the absolute path so KLEOS_CONFIG_FILE resolves regardless of the
     // launchd process working directory; fall back if canonicalize fails.
     let abs_toml = std::fs::canonicalize(&toml_file).unwrap_or_else(|_| toml_file.clone());

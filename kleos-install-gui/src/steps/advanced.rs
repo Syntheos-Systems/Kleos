@@ -1,10 +1,10 @@
 //! Advanced (expert) configuration wizard step.
 //!
 //! Exposes the commonly-flipped server toggles as checkboxes plus a few value
-//! fields, so the user does not have to hand-edit `engram.toml` after install.
+//! fields, so the user does not have to hand-edit `kleos.toml` after install.
 //! Only values changed from their default are emitted as overrides; everything
 //! else stays at the server default (and the full surface remains reachable in
-//! the generated `engram.toml`). Open access lives on the Security step, so it
+//! the generated `kleos.toml`). Open access lives on the Security step, so it
 //! is intentionally not duplicated here.
 
 use eframe::egui;
@@ -175,7 +175,7 @@ pub fn draw_advanced(ui: &mut egui::Ui, app: &mut InstallerApp) {
     ui.add_space(4.0);
     ui.colored_label(
         theme::COLOR_TEXT_DIM,
-        "Optional. Every other setting is written to engram.toml at its default for later editing.",
+        "Optional. Every other setting is written to kleos.toml at its default for later editing.",
     );
     ui.add_space(12.0);
 
