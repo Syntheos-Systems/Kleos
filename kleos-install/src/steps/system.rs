@@ -43,6 +43,7 @@ pub struct SystemStepState {
     pub preview_scroll: u16,
 }
 
+/// Construction and state transitions for the system-integration wizard step.
 impl SystemStepState {
     /// Build the initial system step state from the current wizard state.
     ///
@@ -210,7 +211,8 @@ fn draw_preview(f: &mut Frame, area: Rect, state: &WizardState, step_state: &Sys
             &build_installer_config(state),
             &state.install_dir,
             &state.config_dir,
-        ),
+        )
+        .unwrap_or_else(|e| format!("Could not render plist preview: {e}")),
         _ => String::from("No service file will be generated."),
     };
 

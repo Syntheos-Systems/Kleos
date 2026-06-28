@@ -80,6 +80,7 @@ struct DownloadProgressAdapter<'a> {
     inner: &'a dyn InstallProgress,
 }
 
+/// Bridge install-level progress callbacks to the download layer's trait.
 impl<'a> DownloadProgress for DownloadProgressAdapter<'a> {
     /// Forward per-chunk progress to the install progress handler.
     fn on_progress(&self, component: &str, bytes_downloaded: u64, total_bytes: u64) {
@@ -99,6 +100,7 @@ impl<'a> DownloadProgress for DownloadProgressAdapter<'a> {
     fn on_error(&self, _component: &str, _error: &str) {}
 }
 
+/// Execution of an assembled installation plan.
 impl InstallPlan {
     /// Execute the installation plan, reporting progress via `progress`.
     ///
@@ -234,7 +236,7 @@ fn setup_system_integration(
             install_systemd_unit(&unit, *auto_start)?;
         }
         SystemIntegration::Launchd { auto_start } => {
-            let plist = generate_launchd_plist(config, install_dir, config_dir);
+            let plist = generate_launchd_plist(config, install_dir, config_dir)?;
             install_launchd_plist(&plist, *auto_start)?;
         }
         SystemIntegration::WindowsService => {
