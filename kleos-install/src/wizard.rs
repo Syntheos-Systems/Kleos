@@ -23,6 +23,7 @@ use ratatui::{
 };
 
 use crate::steps::{
+    advanced::{draw_advanced_step, handle_advanced_input, AdvancedStepState},
     components::{draw_components_step, handle_components_input, ComponentsStepState},
     embeddings::{draw_embeddings_step, handle_embeddings_input, EmbeddingsStepState},
     security::{draw_security_step, handle_security_input, SecurityStepState},
@@ -49,6 +50,8 @@ pub enum WizardStep {
     Security,
     /// System service manager integration.
     SystemIntegration,
+    /// Advanced (expert) server toggles.
+    Advanced,
     /// Final summary and install confirmation.
     Summary,
 }
@@ -63,6 +66,7 @@ impl WizardStep {
             WizardStep::Embeddings => "Embeddings",
             WizardStep::Security => "Security",
             WizardStep::SystemIntegration => "System",
+            WizardStep::Advanced => "Advanced",
             WizardStep::Summary => "Summary",
         }
     }
@@ -83,6 +87,8 @@ struct StepStates {
     security: SecurityStepState,
     /// State for the system integration step.
     system: SystemStepState,
+    /// State for the advanced toggle step.
+    advanced: AdvancedStepState,
     /// State for the summary and install step.
     summary: SummaryStepState,
 }
@@ -125,6 +131,8 @@ pub struct WizardState {
     pub show_quit_confirm: bool,
     /// Whether this is an upgrade of an existing installation.
     pub is_upgrade: bool,
+    /// Overrides collected from the Advanced step, folded into the plan.
+    pub advanced_overrides: kleos_install_core::config::ConfigOverrides,
 }
 
 /// Construction and plan assembly for the TUI wizard's mutable state.
@@ -186,6 +194,7 @@ impl WizardState {
             existing_install,
             show_quit_confirm: false,
             is_upgrade,
+            advanced_overrides: kleos_install_core::config::ConfigOverrides::default(),
         };
         state.rebuild_steps();
         state
@@ -212,6 +221,11 @@ impl WizardState {
 
         if has_systemd_or_launchd && has_server {
             steps.push(WizardStep::SystemIntegration);
+        }
+
+        // Advanced server toggles are only relevant when a server is installed.
+        if has_server {
+            steps.push(WizardStep::Advanced);
         }
 
         steps.push(WizardStep::Summary);
@@ -263,7 +277,7 @@ impl WizardState {
             embedding: self.embedding_config.clone(),
             reranker: self.reranker_config.clone(),
             security: self.security_config.clone(),
-            overrides: kleos_install_core::config::ConfigOverrides::default(),
+            overrides: self.advanced_overrides.clone(),
         };
 
         InstallPlan {
@@ -316,6 +330,7 @@ where
         embeddings: EmbeddingsStepState::new(),
         security: SecurityStepState::new(),
         system: SystemStepState::new(&state),
+        advanced: AdvancedStepState::new(),
         summary: SummaryStepState::new(),
     };
 
@@ -354,6 +369,9 @@ where
                 }
                 WizardStep::SystemIntegration => {
                     draw_system_step(f, chunks[2], &state, &step_states.system);
+                }
+                WizardStep::Advanced => {
+                    draw_advanced_step(f, chunks[2], &state, &step_states.advanced);
                 }
                 WizardStep::Summary => {
                     draw_summary_step(f, chunks[2], &state, &step_states.summary);
@@ -422,6 +440,9 @@ where
             }
             WizardStep::SystemIntegration => {
                 handle_system_input(key, &mut state, &mut step_states.system)
+            }
+            WizardStep::Advanced => {
+                handle_advanced_input(key, &mut state, &mut step_states.advanced)
             }
             WizardStep::Summary => {
                 handle_summary_input(key, &mut state, &mut step_states.summary).await
