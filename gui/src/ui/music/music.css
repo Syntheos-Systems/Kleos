@@ -80,9 +80,9 @@
 .music-toggle.is-playing {
   border-color: rgba(94,186,239,0.5);
   opacity: 0.9;
-  animation: sa-musicPulse 2.5s ease-in-out infinite;
+  animation: kl-musicPulse 2.5s ease-in-out infinite;
 }
-@keyframes sa-musicPulse {
+@keyframes kl-musicPulse {
   0%, 100% { box-shadow: 0 0 12px rgba(94,186,239,0.15); }
   50% { box-shadow: 0 0 20px rgba(94,186,239,0.3); }
 }

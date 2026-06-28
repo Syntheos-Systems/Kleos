@@ -89,16 +89,14 @@ function VolumeIcon({ volume }: { volume: number }): React.ReactElement {
 
 export function MusicPlayer(props: MusicPlayerProps): React.ReactElement {
   const { tracks, storagePrefix, defaultVolume, className } = props;
-  const musicOpts: { tracks: Track[]; storagePrefix?: string; defaultVolume?: number } = { tracks };
-  if (storagePrefix !== undefined) musicOpts.storagePrefix = storagePrefix;
-  if (defaultVolume !== undefined) musicOpts.defaultVolume = defaultVolume;
 
+  // Pass props directly; the hook supplies its own defaults for optional fields
   const {
     isPlaying, shuffleOn, volume,
     togglePlay, nextTrack, prevTrack,
     setVolume, toggleShuffle,
     showToast, toastText,
-  } = useMusicPlayer(musicOpts);
+  } = useMusicPlayer({ tracks, storagePrefix, defaultVolume });
 
   const [volPinned, setVolPinned] = React.useState(false);
 

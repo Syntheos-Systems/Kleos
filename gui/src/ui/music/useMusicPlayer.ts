@@ -30,7 +30,7 @@ interface UseMusicPlayerOptions {
 }
 
 export function useMusicPlayer(opts: UseMusicPlayerOptions): MusicPlayerState {
-  const { tracks, storagePrefix = 'sa-music', defaultVolume = 0.35 } = opts;
+  const { tracks, storagePrefix = 'kl-music', defaultVolume = 0.35 } = opts;
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -208,10 +208,9 @@ export function useMusicPlayer(opts: UseMusicPlayerOptions): MusicPlayerState {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const doResume = (e?: Event): void => {
+    const doResume = (_e?: Event): void => {
       if (resumed) return;
       resumed = true;
-      if (e?.type === 'click') e.stopPropagation();
       audio.currentTime = savedTime;
       audio.play().then(() => {
         showToastFn(tracks[i]?.name ?? '');
@@ -229,6 +228,12 @@ export function useMusicPlayer(opts: UseMusicPlayerOptions): MusicPlayerState {
       document.removeEventListener('click', doResume, true);
       document.removeEventListener('keydown', doResume, true);
     }).catch(() => {});
+
+    // Remove capture listeners if the component unmounts before the user interacts
+    return () => {
+      document.removeEventListener('click', doResume, true);
+      document.removeEventListener('keydown', doResume, true);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
@@ -246,5 +251,3 @@ export function useMusicPlayer(opts: UseMusicPlayerOptions): MusicPlayerState {
     toastText,
   };
 }
-
-// Track is already exported at the top of this file
