@@ -1,5 +1,6 @@
 pub mod activity;
 pub mod admin;
+pub mod attention;
 pub mod agents;
 pub mod approvals;
 pub mod artifacts;
