@@ -31,7 +31,10 @@ async fn create_and_retrieve() {
 
     let note = create_note(
         &db,
-        CreateNoteRequest { content: "fix the watcher bug".into(), priority: Some(8) },
+        CreateNoteRequest {
+            content: "fix the watcher bug".into(),
+            priority: Some(8),
+        },
         1,
     )
     .await
@@ -52,7 +55,10 @@ async fn default_priority_is_five() {
 
     let note = create_note(
         &db,
-        CreateNoteRequest { content: "some reminder".into(), priority: None },
+        CreateNoteRequest {
+            content: "some reminder".into(),
+            priority: None,
+        },
         1,
     )
     .await
@@ -66,15 +72,36 @@ async fn list_ordered_by_priority_then_age() {
     let handle = one_db().await;
     let db = handle.database();
 
-    create_note(&db, CreateNoteRequest { content: "low".into(), priority: Some(2) }, 1)
-        .await
-        .expect("create low");
-    create_note(&db, CreateNoteRequest { content: "high".into(), priority: Some(9) }, 1)
-        .await
-        .expect("create high");
-    create_note(&db, CreateNoteRequest { content: "mid".into(), priority: Some(5) }, 1)
-        .await
-        .expect("create mid");
+    create_note(
+        &db,
+        CreateNoteRequest {
+            content: "low".into(),
+            priority: Some(2),
+        },
+        1,
+    )
+    .await
+    .expect("create low");
+    create_note(
+        &db,
+        CreateNoteRequest {
+            content: "high".into(),
+            priority: Some(9),
+        },
+        1,
+    )
+    .await
+    .expect("create high");
+    create_note(
+        &db,
+        CreateNoteRequest {
+            content: "mid".into(),
+            priority: Some(5),
+        },
+        1,
+    )
+    .await
+    .expect("create mid");
 
     let notes = list_notes(&db, 1, 10).await.expect("list");
     assert_eq!(notes.len(), 3);
@@ -90,7 +117,10 @@ async fn update_content_and_priority() {
 
     let note = create_note(
         &db,
-        CreateNoteRequest { content: "original".into(), priority: Some(3) },
+        CreateNoteRequest {
+            content: "original".into(),
+            priority: Some(3),
+        },
         1,
     )
     .await
@@ -99,7 +129,10 @@ async fn update_content_and_priority() {
     let updated = update_note(
         &db,
         note.id,
-        UpdateNoteRequest { content: Some("updated".into()), priority: Some(7) },
+        UpdateNoteRequest {
+            content: Some("updated".into()),
+            priority: Some(7),
+        },
         1,
     )
     .await
@@ -116,7 +149,10 @@ async fn partial_update_leaves_other_fields_intact() {
 
     let note = create_note(
         &db,
-        CreateNoteRequest { content: "keep this".into(), priority: Some(6) },
+        CreateNoteRequest {
+            content: "keep this".into(),
+            priority: Some(6),
+        },
         1,
     )
     .await
@@ -125,7 +161,10 @@ async fn partial_update_leaves_other_fields_intact() {
     let updated = update_note(
         &db,
         note.id,
-        UpdateNoteRequest { content: None, priority: Some(9) },
+        UpdateNoteRequest {
+            content: None,
+            priority: Some(9),
+        },
         1,
     )
     .await
@@ -142,7 +181,10 @@ async fn delete_removes_note() {
 
     let note = create_note(
         &db,
-        CreateNoteRequest { content: "done".into(), priority: None },
+        CreateNoteRequest {
+            content: "done".into(),
+            priority: None,
+        },
         1,
     )
     .await
@@ -164,12 +206,26 @@ async fn list_is_scoped_to_user() {
     let handle = one_db().await;
     let db = handle.database();
 
-    create_note(&db, CreateNoteRequest { content: "alice note".into(), priority: None }, ALICE)
-        .await
-        .expect("alice create");
-    create_note(&db, CreateNoteRequest { content: "bob note".into(), priority: None }, BOB)
-        .await
-        .expect("bob create");
+    create_note(
+        &db,
+        CreateNoteRequest {
+            content: "alice note".into(),
+            priority: None,
+        },
+        ALICE,
+    )
+    .await
+    .expect("alice create");
+    create_note(
+        &db,
+        CreateNoteRequest {
+            content: "bob note".into(),
+            priority: None,
+        },
+        BOB,
+    )
+    .await
+    .expect("bob create");
 
     let alice = list_notes(&db, ALICE, 50).await.expect("alice list");
     let bob = list_notes(&db, BOB, 50).await.expect("bob list");
@@ -190,7 +246,10 @@ async fn update_by_other_tenant_is_noop() {
 
     let note = create_note(
         &db,
-        CreateNoteRequest { content: "owner note".into(), priority: Some(5) },
+        CreateNoteRequest {
+            content: "owner note".into(),
+            priority: Some(5),
+        },
         OWNER,
     )
     .await
@@ -199,7 +258,10 @@ async fn update_by_other_tenant_is_noop() {
     let result = update_note(
         &db,
         note.id,
-        UpdateNoteRequest { content: Some("hijacked".into()), priority: None },
+        UpdateNoteRequest {
+            content: Some("hijacked".into()),
+            priority: None,
+        },
         INTRUDER,
     )
     .await;
@@ -220,7 +282,10 @@ async fn delete_by_other_tenant_is_noop() {
 
     let note = create_note(
         &db,
-        CreateNoteRequest { content: "survives".into(), priority: None },
+        CreateNoteRequest {
+            content: "survives".into(),
+            priority: None,
+        },
         OWNER,
     )
     .await
@@ -243,7 +308,10 @@ async fn get_by_other_tenant_is_noop() {
 
     let note = create_note(
         &db,
-        CreateNoteRequest { content: "private".into(), priority: None },
+        CreateNoteRequest {
+            content: "private".into(),
+            priority: None,
+        },
         OWNER,
     )
     .await
@@ -263,7 +331,10 @@ async fn priority_out_of_range_is_rejected() {
     for bad in [0i64, 11, -1, 999] {
         let result = create_note(
             &db,
-            CreateNoteRequest { content: "test".into(), priority: Some(bad) },
+            CreateNoteRequest {
+                content: "test".into(),
+                priority: Some(bad),
+            },
             1,
         )
         .await;
@@ -279,7 +350,10 @@ async fn priority_boundaries_are_accepted() {
     for good in [1i64, 5, 10] {
         create_note(
             &db,
-            CreateNoteRequest { content: format!("prio {good}"), priority: Some(good) },
+            CreateNoteRequest {
+                content: format!("prio {good}"),
+                priority: Some(good),
+            },
             1,
         )
         .await
