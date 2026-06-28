@@ -130,7 +130,7 @@
 
 /* Respect reduced motion: stop all card/title motion. */
 @media (prefers-reduced-motion: reduce) {
-  .kl-card { animation: none; }
+  .kl-card { animation: none; transition: none; }
   .kl-card:hover { transform: none; }
   .kl-glitch.is-glitching::before,
   .kl-glitch.is-glitching::after { animation: none; }

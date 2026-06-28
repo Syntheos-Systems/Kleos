@@ -9,6 +9,7 @@ export interface FloatingCardProps {
   accent?: string;
   isEmpty?: boolean;
   badges?: ReactNode;
+  // Reserved for a future backface flip; not yet rendered.
   back?: ReactNode;
   onClick?: () => void;
   index?: number;
