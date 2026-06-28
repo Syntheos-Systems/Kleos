@@ -4971,6 +4971,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "kleos-config"
+version = "1.8.0"
+dependencies = [
+ "dirs 6.0.0",
+ "ipnet",
+ "secrecy",
+ "serde",
+ "toml",
+ "tracing",
+]
+
+[[package]]
 name = "kleos-cred"
 version = "1.8.0"
 dependencies = [
@@ -5139,6 +5151,7 @@ dependencies = [
  "hkdf",
  "hmac",
  "ipnet",
+ "kleos-config",
  "lancedb",
  "lru 0.16.4",
  "metrics",
