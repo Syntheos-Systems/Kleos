@@ -2192,6 +2192,7 @@ mod tests {
     /// honors the cap, so a hop-2 neighbor always ranks beneath its full-weight hop-1 parents.
     #[test]
     fn inject_graph_neighbors_applies_multiplier_and_cap() {
+        // Build a GraphExpansionRow fixture with the given link id for the test.
         fn row(id: i64) -> GraphExpansionRow {
             GraphExpansionRow {
                 link_id: id,
