@@ -543,6 +543,10 @@ pub struct ListOptions {
     pub from: Option<String>,
     /// Exclusive upper bound on created_at (YYYY-MM-DD), or None.
     pub to: Option<String>,
+    /// Include memories still pending human review (status='pending'). Default
+    /// false so the review gate withholds unreviewed memories from default
+    /// listings and recall; the Inbox path queries pending rows directly.
+    pub include_pending: bool,
 }
 /// Constructs ListOptions with a 50-item page, zero offset, and all filters unset.
 impl Default for ListOptions {
@@ -559,6 +563,7 @@ impl Default for ListOptions {
             include_archived: false,
             from: None,
             to: None,
+            include_pending: false,
         }
     }
 }
