@@ -1517,7 +1517,17 @@ pub async fn hybrid_search(
                 }
             }
             if let Some(thr) = filter_threshold {
-                if r.score < thr as f64 {
+                // Same scale caveat as context assembly: r.score is on the [0,1]
+                // similarity scale only when the reranker ran; otherwise it is the
+                // raw RRF-fusion value. Gate on the cosine semantic_score when not
+                // reranked so a caller's similarity-scale threshold does not
+                // silently drop every result.
+                if !scoring::passes_relevance_gate(
+                    r.reranked,
+                    r.score,
+                    r.semantic_score,
+                    thr as f64,
+                ) {
                     return false;
                 }
             }
