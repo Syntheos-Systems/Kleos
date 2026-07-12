@@ -228,7 +228,7 @@ pub async fn get_episode_memories(
             "SELECT id, content, category, source, importance, created_at
                  FROM memories
                  WHERE episode_id = ?1 AND user_id = ?2 AND is_forgotten = 0 \
-                   AND is_latest = 1 AND is_archived = 0
+                   AND is_latest = 1 AND is_archived = 0 AND status != 'pending'
                  ORDER BY created_at DESC",
         )?;
 

@@ -355,7 +355,8 @@ pub async fn time_travel(
             let mut stmt = conn.prepare(
                 "SELECT id, content, category, importance, created_at \
                      FROM memories \
-                     WHERE created_at <= ?1 AND is_forgotten = 0 \
+                     WHERE created_at <= ?1 AND is_forgotten = 0 AND is_archived = 0 \
+                       AND status != 'pending' \
                        AND content LIKE ?2 AND user_id = ?4 \
                      ORDER BY created_at DESC LIMIT ?3",
             )?;

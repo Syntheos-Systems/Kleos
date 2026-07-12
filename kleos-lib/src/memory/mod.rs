@@ -1457,7 +1457,11 @@ pub async fn update(
     let new_category = req.category.as_deref().unwrap_or(&old.category).to_string();
     let new_importance = clamp_importance(req.importance.unwrap_or(old.importance));
     let new_is_static = req.is_static.unwrap_or(old.is_static) as i32;
-    let new_status = req.status.as_deref().unwrap_or(&old.status).to_string();
+    // Review-gate write-path lockdown: status is NOT client-settable through
+    // update(). Honoring req.status here let any caller flip its own 'pending'
+    // memory to 'approved', self-approving past the inbox review the gate exists
+    // to enforce. Approval flows exclusively through inbox::approve_memory.
+    let new_status = old.status.clone();
     let new_tags_json = if req.tags.is_some() {
         normalize_tags(&req.tags)
     } else {
@@ -1988,6 +1992,8 @@ pub async fn search_by_tags(
              WHERE m.user_id = ?{}
                AND m.is_forgotten = 0
                AND m.is_latest = 1
+               AND m.is_archived = 0
+               AND m.status != 'pending'
                AND m.tags IS NOT NULL
                AND (SELECT COUNT(DISTINCT je.value)
                     FROM json_each(m.tags) je
@@ -2007,6 +2013,8 @@ pub async fn search_by_tags(
              WHERE m.user_id = ?{}
                AND m.is_forgotten = 0
                AND m.is_latest = 1
+               AND m.is_archived = 0
+               AND m.status != 'pending'
                AND m.tags IS NOT NULL
                AND EXISTS (
                    SELECT 1 FROM json_each(m.tags) je

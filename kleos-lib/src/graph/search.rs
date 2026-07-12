@@ -38,6 +38,7 @@ pub async fn graph_search(
                             decay_score, community_id \
                      FROM memories \
                      WHERE is_forgotten = 0 AND is_archived = 0 AND is_latest = 1 \
+                       AND status != 'pending' \
                        AND user_id = ?3 \
                        AND content LIKE ?1 \
                      ORDER BY importance DESC \
@@ -403,7 +404,9 @@ async fn batch_fetch_memory_nodes(
                 "SELECT id, content, category, importance, pagerank_score, \
                         source, created_at, is_static, source_count, \
                         decay_score, community_id \
-                 FROM memories WHERE id IN ({placeholders}) AND user_id = ?{uid}",
+                 FROM memories WHERE id IN ({placeholders}) AND user_id = ?{uid} \
+                   AND is_forgotten = 0 AND is_archived = 0 AND is_latest = 1 \
+                   AND status != 'pending'",
                 placeholders = placeholders,
                 uid = uid_placeholder,
             );

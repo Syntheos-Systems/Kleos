@@ -48,7 +48,8 @@ pub async fn consolidate(db: &Database, memory_ids: &[String], user_id: i64) -> 
                 .join(",");
             let sql = format!(
                 "SELECT id, content, category, importance \
-                 FROM memories WHERE id IN ({}) AND user_id = ?1 AND is_forgotten = 0",
+                 FROM memories WHERE id IN ({}) AND user_id = ?1 AND is_forgotten = 0 \
+                  AND is_archived = 0 AND status != 'pending'",
                 placeholders
             );
             let mut stmt = conn.prepare(&sql)?;

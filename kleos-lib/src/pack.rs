@@ -57,6 +57,7 @@ pub async fn pack_memories(
                      FROM memories \
                      WHERE is_static = 1 AND is_forgotten = 0 AND is_archived = 0 \
                        AND is_consolidated = 0 AND is_latest = 1 \
+                       AND status != 'pending' \
                        AND user_id = ?1",
             )?;
             let rows = stmt.query_map(rusqlite::params![static_user_id], |row| {
@@ -87,7 +88,7 @@ pub async fn pack_memories(
                             COALESCE(decay_score, importance) as ds \
                      FROM memories \
                      WHERE is_forgotten = 0 AND is_archived = 0 AND is_latest = 1 \
-                       AND is_consolidated = 0 AND user_id = ?1 \
+                       AND is_consolidated = 0 AND status != 'pending' AND user_id = ?1 \
                      ORDER BY ds DESC LIMIT 30",
             )?;
             let rows = stmt.query_map(rusqlite::params![important_user_id], |row| {
