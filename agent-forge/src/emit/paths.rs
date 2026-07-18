@@ -114,11 +114,17 @@ mod tests {
     #[test]
     fn paths_follow_the_documented_layout() {
         let root = Path::new("/repo");
-        assert_eq!(record_path(root, "my-spec"),
-                   Path::new("/repo/docs/agent-forge/work/my-spec/record.md"));
-        assert_eq!(slice_path(root, "my-spec", 2, "wire-it"),
-                   Path::new("/repo/docs/agent-forge/work/my-spec/slices/002-wire-it.md"));
-        assert_eq!(design_path(root, "my-spec"),
-                   Path::new("/repo/docs/agent-forge/design/my-spec.md"));
+        assert_eq!(
+            record_path(root, "my-spec"),
+            Path::new("/repo/docs/agent-forge/work/my-spec/record.md")
+        );
+        assert_eq!(
+            slice_path(root, "my-spec", 2, "wire-it"),
+            Path::new("/repo/docs/agent-forge/work/my-spec/slices/002-wire-it.md")
+        );
+        assert_eq!(
+            design_path(root, "my-spec"),
+            Path::new("/repo/docs/agent-forge/design/my-spec.md")
+        );
     }
 }
