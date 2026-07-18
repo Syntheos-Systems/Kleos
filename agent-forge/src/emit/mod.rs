@@ -12,3 +12,6 @@ pub mod trust;
 
 /// Markdown renderers for emitted documents.
 pub mod render;
+
+/// Mechanical leak scanning and repository visibility detection.
+pub mod gatekeeper;
