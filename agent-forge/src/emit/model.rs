@@ -208,7 +208,10 @@ mod tests {
 
         let record = load_spec_record(&db, "spec_1").unwrap();
         assert_eq!(record.task_description, "Add a thing");
-        assert_eq!(record.acceptance_criteria, vec!["criterion one", "criterion two"]);
+        assert_eq!(
+            record.acceptance_criteria,
+            vec!["criterion one", "criterion two"]
+        );
         assert_eq!(record.edge_cases, vec!["edge one"]);
         assert_eq!(record.approaches.len(), 2);
 
