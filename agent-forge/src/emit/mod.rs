@@ -6,3 +6,6 @@ pub mod paths;
 
 /// Typed read model over the forge tables.
 pub mod model;
+
+/// Trust tiers derived from verification evidence.
+pub mod trust;
