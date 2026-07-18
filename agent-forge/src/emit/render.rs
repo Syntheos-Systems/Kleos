@@ -264,14 +264,37 @@ mod tests {
         r.interface_contract = Some("example:\n```\nfn thing() {}\n```".into());
         let md = render_record(&r, Trust::SpecVerified);
         assert!(md.contains("````text"));
-        // The sections after the contract must still be headings, not code.
-        assert!(md.contains("## Decision: Direct"));
-        assert!(md.contains("## Verification evidence"));
+        // The opening and closing fences must PAIR. Asserting that the later
+        // headings are merely present proves nothing, because they are emitted
+        // unconditionally and `contains` does not parse markdown -- a mismatched
+        // closing fence would leave the block open and still satisfy that check.
+        // Counting the four-backtick runs catches exactly that regression: the
+        // contract's own three-backtick fences cannot match, so a correct render
+        // has precisely two.
+        assert_eq!(md.matches("````").count(), 2);
     }
 
-    /// The rendered alternative is the highest-scoring rejected approach, not
-    /// merely the first or last one present. With a single rejected approach any
-    /// selection rule looks correct, so this pins the behaviour with three.
+    /// Content with no backticks gets the minimum three-backtick fence, not a
+    /// wider one. Without this, an off-by-one in `fence_for` would go unnoticed
+    /// because every other test only checks that the content survives.
+    #[test]
+    fn fence_floor_is_three_backticks() {
+        let mut r = record();
+        r.interface_contract = Some("fn thing() -> u8".into());
+        let md = render_record(&r, Trust::SpecVerified);
+        assert!(md.contains("```text"));
+        assert!(!md.contains("````"));
+    }
+
+    /// The rendered alternative is the highest-SCORING rejected approach, and the
+    /// score is what drives the choice -- not the position in the list.
+    ///
+    /// The ordering here is deliberate. `Strong` is neither the first nor the
+    /// last rejected approach, so this arrangement discriminates between all
+    /// three plausible selection rules at once: "first unchosen" would surface
+    /// `Weak`, "last unchosen" would surface `Mid`, and only a score-driven rule
+    /// surfaces `Strong`. Putting the highest scorer at either end, as an earlier
+    /// version of this test did, cannot tell those rules apart.
     #[test]
     fn alternative_is_the_highest_scoring_rejection() {
         let mut r = record();
@@ -300,9 +323,18 @@ mod tests {
                 score: Some(7.0),
                 chosen: false,
             },
+            ApproachRow {
+                name: "Mid".into(),
+                description: "a middling option".into(),
+                pros: vec![],
+                cons: vec!["awkward".into()],
+                score: Some(5.0),
+                chosen: false,
+            },
         ];
         let md = render_record(&r, Trust::SpecVerified);
         assert!(md.contains("**alternative:** Strong -- rejected: slower"));
         assert!(!md.contains("Weak"));
+        assert!(!md.contains("Mid"));
     }
 }
