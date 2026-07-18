@@ -9,6 +9,9 @@
 /// Database access: SQLite forge DB open/migrate/query.
 pub mod db;
 
+/// Emission layer: renders the forge record into committed markdown.
+pub mod emit;
+
 /// JSON file I/O and the canonical `Output` envelope used by every tool.
 pub mod json_io;
 
