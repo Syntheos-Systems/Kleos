@@ -38,15 +38,12 @@ fn render_decision(approaches: &[ApproachRow], trust: Trust) -> String {
 
     // The strongest rejected alternative is the highest-scoring unchosen
     // approach; absent scores, the first unchosen one.
-    let alternative = approaches
-        .iter()
-        .filter(|a| !a.chosen)
-        .max_by(|a, b| {
-            a.score
-                .unwrap_or(f64::MIN)
-                .partial_cmp(&b.score.unwrap_or(f64::MIN))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+    let alternative = approaches.iter().filter(|a| !a.chosen).max_by(|a, b| {
+        a.score
+            .unwrap_or(f64::MIN)
+            .partial_cmp(&b.score.unwrap_or(f64::MIN))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let mut out = format!("\n## Decision: {}\n\n", chosen.name);
     out.push_str(&format!("- **why:** {}\n", chosen.description));
