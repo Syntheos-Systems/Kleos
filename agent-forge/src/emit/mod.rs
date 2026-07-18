@@ -9,3 +9,6 @@ pub mod model;
 
 /// Trust tiers derived from verification evidence.
 pub mod trust;
+
+/// Markdown renderers for emitted documents.
+pub mod render;
