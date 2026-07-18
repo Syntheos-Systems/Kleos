@@ -77,10 +77,14 @@ mod tests {
     }
 
     /// The spec-verified label must state the limit of the claim, so a reader is
-    /// never told an individual decision was proved when it was not.
+    /// never told an individual decision was proved when it was not. Both halves
+    /// of the caveat are pinned: an edit that keeps "not separately proved" while
+    /// dropping "individual decision" would still be a softening, and that is
+    /// precisely the regression this test exists to catch.
     #[test]
     fn spec_verified_label_states_its_limit() {
         let label = Trust::SpecVerified.label();
+        assert!(label.contains("individual decision"));
         assert!(label.contains("not separately proved"));
     }
 }
