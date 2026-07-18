@@ -3,3 +3,6 @@
 
 /// Filesystem layout and slug generation for emitted documents.
 pub mod paths;
+
+/// Typed read model over the forge tables.
+pub mod model;
