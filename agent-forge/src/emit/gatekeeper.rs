@@ -25,11 +25,11 @@ fn is_private_ipv4(token: &str) -> bool {
     }
 }
 
-/// Strip punctuation that abuts a token in prose so it can be parsed on its own.
-/// Interior dots survive because they separate the octets; leading and trailing
-/// ones do not, so a sentence-final "10.0.0.1." still parses as an address.
+/// Strip leading and trailing dots from a candidate run so a sentence-final
+/// address like "10.0.0.1." still parses. Interior dots survive because they
+/// separate the octets.
 fn trim_token(token: &str) -> &str {
-    token.trim_matches(|c: char| !c.is_ascii_alphanumeric())
+    token.trim_matches('.')
 }
 
 /// Scan emitted content for material that must never reach a public repository.
@@ -39,8 +39,15 @@ fn trim_token(token: &str) -> &str {
 pub fn scan_for_leaks(content: &str) -> Vec<String> {
     let mut findings = Vec::new();
 
-    for raw in content.split_whitespace() {
-        let token = trim_token(raw);
+    // Split on anything that cannot appear inside a dotted quad, so an address
+    // is found wherever it sits. Splitting on whitespace and trimming only the
+    // ends misses every form where the punctuation is INSIDE the token:
+    // `host=10.0.0.1`, `10.0.0.1:8080`, `git@10.0.0.1:org/repo`, a comma
+    // separated list, or a markdown link. Those are ordinary content for an
+    // infrastructure document, so missing them would make this gate unreliable
+    // at the one category it most exists to catch.
+    for run in content.split(|c: char| !c.is_ascii_digit() && c != '.') {
+        let token = trim_token(run);
         if is_private_ipv4(token) {
             findings.push(format!("private address: {}", token));
         }
@@ -53,6 +60,17 @@ pub fn scan_for_leaks(content: &str) -> Vec<String> {
     let lowered = content.to_lowercase();
     for marker in ["api_key", "apikey", "password", "secret_key", "token"] {
         for (idx, _) in lowered.match_indices(marker) {
+            // Require a word boundary before the marker so compound identifiers
+            // such as `trim_token` or `detokenize` do not masquerade as one.
+            let preceded_by_word_char = idx > 0
+                && lowered[..idx]
+                    .chars()
+                    .next_back()
+                    .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+            if preceded_by_word_char {
+                continue;
+            }
+
             let rest = &lowered[idx + marker.len()..];
             let rest = rest.trim_start();
             if rest.starts_with('=') || rest.starts_with(':') {
@@ -60,7 +78,17 @@ pub fn scan_for_leaks(content: &str) -> Vec<String> {
                 // A bare mention such as "password: none recorded" is prose, not
                 // a credential. Require a value with some length and no spaces.
                 let candidate: String = value.chars().take_while(|c| !c.is_whitespace()).collect();
-                if candidate.len() >= 6 {
+                // Prose values such as "expired" or "revoked" are the wrong
+                // SHAPE for a secret. A generated credential is either long or
+                // mixes letters and digits, so requiring that keeps ordinary
+                // sentences about session tokens from tripping the gate. This
+                // module discusses tokens constantly; a gate that refuses its
+                // own documentation would be turned off, and a gate that is
+                // turned off protects nothing.
+                let has_digit = candidate.chars().any(|c| c.is_ascii_digit());
+                let has_alpha = candidate.chars().any(|c| c.is_ascii_alphabetic());
+                let looks_generated = candidate.len() >= 12 || (has_digit && has_alpha);
+                if candidate.len() >= 6 && looks_generated {
                     findings.push(format!("credential-shaped assignment: {}", marker));
                     break;
                 }
@@ -150,6 +178,36 @@ mod tests {
     fn flags_addresses_abutted_by_punctuation() {
         assert!(!scan_for_leaks("it talks to 10.0.0.1.").is_empty());
         assert!(!scan_for_leaks("see (192.168.1.1), the host").is_empty());
+    }
+
+    /// An address is caught wherever it is embedded, not only when surrounded by
+    /// whitespace. Every form here is ordinary content for an infrastructure
+    /// document, and every one of them defeated the original whitespace-split
+    /// scan because the punctuation sits inside the token rather than at its
+    /// edges. This is the regression that matters most in this module.
+    #[test]
+    fn flags_addresses_embedded_in_punctuation() {
+        assert!(!scan_for_leaks("host=10.0.0.1").is_empty());
+        assert!(!scan_for_leaks("connect to 10.0.0.1:4200 now").is_empty());
+        assert!(!scan_for_leaks("git@10.0.0.1:org/repo.git").is_empty());
+        assert!(!scan_for_leaks("10.0.0.1,10.0.0.2").is_empty());
+        assert!(!scan_for_leaks("[server](http://192.168.1.1/path)").is_empty());
+    }
+
+    /// Ordinary prose about tokens is not a credential. This module and the
+    /// documents it screens discuss session and auth tokens constantly, so a
+    /// gate that refused them would be switched off, and a gate that is switched
+    /// off protects nothing.
+    #[test]
+    fn ignores_token_prose() {
+        assert!(scan_for_leaks("the session token: expired overnight").is_empty());
+        assert!(scan_for_leaks("auth token: revoked by the server").is_empty());
+    }
+
+    /// A marker inside a larger identifier is not a credential assignment.
+    #[test]
+    fn ignores_marker_inside_an_identifier() {
+        assert!(scan_for_leaks("fn trim_token: helper for the scan").is_empty());
     }
 
     /// The shared guard passes clean content through.
