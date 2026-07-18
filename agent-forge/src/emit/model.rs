@@ -68,6 +68,12 @@ pub struct SpecRecord {
 /// Parse a column holding a JSON array of strings. A malformed or absent value
 /// degrades to an empty list: a partially broken record is still worth rendering,
 /// and failing the whole load would lose the parts that are intact.
+///
+/// This tolerance is deliberately scoped to a single FIELD. A malformed ROW is
+/// not tolerated -- see `load_spec_record`, which propagates row-level failures
+/// as `DatabaseError` rather than dropping the row. Dropping a row would remove
+/// a whole decision from the emitted documentation without saying so, and a
+/// record that silently omits a decision is worse than no record at all.
 fn parse_json_array(raw: Option<String>) -> Vec<String> {
     raw.and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
         .unwrap_or_default()
@@ -113,8 +119,8 @@ pub fn load_spec_record(db: &Database, spec_id: &str) -> Result<SpecRecord, Tool
             })
         })
         .map_err(|e| ToolError::DatabaseError(e.to_string()))?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
     let mut learn_stmt = db
         .conn()
@@ -132,8 +138,8 @@ pub fn load_spec_record(db: &Database, spec_id: &str) -> Result<SpecRecord, Tool
             })
         })
         .map_err(|e| ToolError::DatabaseError(e.to_string()))?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
     let mut ver_stmt = db
         .conn()
@@ -151,8 +157,8 @@ pub fn load_spec_record(db: &Database, spec_id: &str) -> Result<SpecRecord, Tool
             })
         })
         .map_err(|e| ToolError::DatabaseError(e.to_string()))?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
     Ok(SpecRecord {
         id: spec_id.to_string(),
@@ -249,5 +255,31 @@ mod tests {
             .unwrap();
         let record = load_spec_record(&db, "spec_2").unwrap();
         assert!(record.acceptance_criteria.is_empty());
+    }
+
+    /// A row that cannot be deserialized fails the whole load rather than being
+    /// dropped. Silently omitting an approach would silently omit a decision
+    /// from the emitted documentation, which is the one failure this tool must
+    /// never have. A malformed JSON column degrades (above); a malformed ROW
+    /// does not.
+    #[test]
+    fn unreadable_row_fails_the_load() {
+        let dir = tempdir().unwrap();
+        let db = Database::open(&dir.path().join("forge.db")).unwrap();
+        db.conn()
+            .execute_batch(
+                r#"
+                INSERT INTO specs (id, created_at, task_description, task_type,
+                                   acceptance_criteria, status)
+                VALUES ('spec_3', 1, 'Add a thing', 'feature', '[]', 'active');
+
+                INSERT INTO approaches (id, spec_id, created_at, name, description,
+                                        pros, cons, score, chosen)
+                VALUES ('appr_bad', 'spec_3', 1, 'Direct', 'Do it directly',
+                        '[]', '[]', 8.0, NULL);
+                "#,
+            )
+            .unwrap();
+        assert!(load_spec_record(&db, "spec_3").is_err());
     }
 }
