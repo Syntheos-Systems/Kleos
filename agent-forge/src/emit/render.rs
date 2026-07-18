@@ -28,6 +28,26 @@ fn bullets(items: &[String]) -> String {
         .join("")
 }
 
+/// Choose a code-fence long enough that the content cannot close it early.
+/// CommonMark ends a fenced block at the first line whose backtick run is at
+/// least as long as the opening fence, so an interface contract containing its
+/// own fence would otherwise terminate the block and swallow everything after
+/// it into a code span. The fence is therefore one backtick longer than the
+/// longest run the content contains, with three as the floor.
+fn fence_for(content: &str) -> String {
+    let mut longest = 0usize;
+    let mut current = 0usize;
+    for ch in content.chars() {
+        if ch == '`' {
+            current += 1;
+            longest = longest.max(current);
+        } else {
+            current = 0;
+        }
+    }
+    "`".repeat(longest.max(2) + 1)
+}
+
 /// Render the chosen approach as a decision block naming the strongest rejected
 /// alternative and the reason it lost. Returns an empty string when no approach
 /// was marked chosen, because a decision with no chosen path is not a decision.
@@ -37,7 +57,9 @@ fn render_decision(approaches: &[ApproachRow], trust: Trust) -> String {
     };
 
     // The strongest rejected alternative is the highest-scoring unchosen
-    // approach; absent scores, the first unchosen one.
+    // approach. Unscored approaches compare as f64::MIN so they sort last, and
+    // max_by yields the LAST of several equal maxima, so a tie (including a tie
+    // between two unscored approaches) resolves to the most recently recorded.
     let alternative = approaches.iter().filter(|a| !a.chosen).max_by(|a, b| {
         a.score
             .unwrap_or(f64::MIN)
@@ -78,7 +100,8 @@ pub fn render_record(record: &SpecRecord, trust: Trust) -> String {
 
     if let Some(contract) = &record.interface_contract {
         out.push_str("\n## Interface contract\n\n");
-        out.push_str(&format!("```text\n{}\n```\n", contract));
+        let fence = fence_for(contract);
+        out.push_str(&format!("{}text\n{}\n{}\n", fence, contract, fence));
     }
 
     out.push_str(&render_decision(&record.approaches, trust));
@@ -229,5 +252,57 @@ mod tests {
         assert!(md.contains("## Hard-won conditions"));
         assert!(md.contains("Empty specs still render"));
         assert!(md.contains("The cache lies on cold start"));
+    }
+
+    /// An interface contract containing its own code fence does not terminate the
+    /// block early. Without a longer outer fence the contract's closing backticks
+    /// would end the section and swallow the Decision and Verification headings
+    /// into a code span -- silent corruption of a committed document.
+    #[test]
+    fn interface_contract_containing_a_fence_stays_fenced() {
+        let mut r = record();
+        r.interface_contract = Some("example:\n```\nfn thing() {}\n```".into());
+        let md = render_record(&r, Trust::SpecVerified);
+        assert!(md.contains("````text"));
+        // The sections after the contract must still be headings, not code.
+        assert!(md.contains("## Decision: Direct"));
+        assert!(md.contains("## Verification evidence"));
+    }
+
+    /// The rendered alternative is the highest-scoring rejected approach, not
+    /// merely the first or last one present. With a single rejected approach any
+    /// selection rule looks correct, so this pins the behaviour with three.
+    #[test]
+    fn alternative_is_the_highest_scoring_rejection() {
+        let mut r = record();
+        r.approaches = vec![
+            ApproachRow {
+                name: "Chosen".into(),
+                description: "the taken path".into(),
+                pros: vec![],
+                cons: vec![],
+                score: Some(9.0),
+                chosen: true,
+            },
+            ApproachRow {
+                name: "Weak".into(),
+                description: "a poor option".into(),
+                pros: vec![],
+                cons: vec!["barely works".into()],
+                score: Some(2.0),
+                chosen: false,
+            },
+            ApproachRow {
+                name: "Strong".into(),
+                description: "the real contender".into(),
+                pros: vec![],
+                cons: vec!["slower".into()],
+                score: Some(7.0),
+                chosen: false,
+            },
+        ];
+        let md = render_record(&r, Trust::SpecVerified);
+        assert!(md.contains("**alternative:** Strong -- rejected: slower"));
+        assert!(!md.contains("Weak"));
     }
 }
