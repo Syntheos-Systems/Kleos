@@ -52,6 +52,11 @@ fn fence_for(content: &str) -> String {
 /// alternative and the reason it lost. Returns an empty string when no approach
 /// was marked chosen, because a decision with no chosen path is not a decision.
 fn render_decision(approaches: &[ApproachRow], trust: Trust) -> String {
+    // Known gap against the design's decision-block schema: `where:` (a file or
+    // area anchoring the decision) is specified as non-optional, but nothing in
+    // the data model can source it -- `approaches` has no such column. The field
+    // is therefore absent rather than fabricated. Phase 2 computes the changed
+    // file set per slice, which is where an anchor would come from.
     let Some(chosen) = approaches.iter().find(|a| a.chosen) else {
         return String::new();
     };
@@ -138,6 +143,10 @@ pub fn render_slice(
 
     out.push_str("\n## Hard-won conditions\n\n");
     let mut conditions = content.conditions.clone();
+    // Phase 1 has no time window, so every slice repeats the spec's entire
+    // discovery history rather than only what is new since the previous
+    // checkpoint. Slice 003 therefore restates what 001 and 002 already showed.
+    // Phase 2's slice diffing supplies the scoping that fixes this.
     for learn in &record.learns {
         conditions.push(match &learn.context {
             Some(ctx) => format!("{} ({})", learn.discovery, ctx),

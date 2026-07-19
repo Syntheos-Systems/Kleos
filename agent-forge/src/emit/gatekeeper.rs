@@ -3,8 +3,10 @@
 //! and the caller is told when a semantic pass is still required.
 
 use crate::tools::ToolError;
+use std::io::Read;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 /// Whether a dotted-quad token is an RFC1918 private address. Parsing beats a
 /// regex here because the range checks are exact rather than approximated.
@@ -134,19 +136,53 @@ pub fn guard_no_leaks(content: &str) -> Result<(), ToolError> {
 
 /// Best-effort check of whether the repository at `repo_root` is public.
 /// Returns true when visibility cannot be determined, so an unknown repository
-/// is screened as if it were public. Failing safe is the whole point.
+/// is screened as if it were public. Failing safe is the whole point. Waits at
+/// most `VISIBILITY_TIMEOUT` for `gh` to answer; a call that has not finished by
+/// the deadline is killed and also resolves to true, so a stalled network call
+/// cannot hang the caller.
 pub fn is_public_repo(repo_root: &Path) -> bool {
-    let output = Command::new("gh")
+    // Wait out the subprocess rather than blocking forever. `gh` makes a network
+    // call, and this runs on every emitting checkpoint, so a stalled call would
+    // hang the agent's critical path. Every failure mode -- missing gh, non-zero
+    // exit, timeout -- falls through to `true`, which screens the content. The
+    // gate erring toward more screening is the safe direction.
+    const VISIBILITY_TIMEOUT: Duration = Duration::from_secs(5);
+
+    let Ok(mut child) = Command::new("gh")
         .args(["repo", "view", "--json", "visibility", "-q", ".visibility"])
         .current_dir(repo_root)
-        .output();
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    else {
+        return true;
+    };
 
-    match output {
-        Ok(o) if o.status.success() => {
-            let visibility = String::from_utf8_lossy(&o.stdout).trim().to_uppercase();
-            visibility != "PRIVATE"
+    let deadline = Instant::now() + VISIBILITY_TIMEOUT;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    return true;
+                }
+                let mut out = String::new();
+                if let Some(mut stdout) = child.stdout.take() {
+                    if stdout.read_to_string(&mut out).is_err() {
+                        return true;
+                    }
+                }
+                return out.trim().to_uppercase() != "PRIVATE";
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return true;
+                }
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(_) => return true,
         }
-        _ => true,
     }
 }
 
@@ -154,6 +190,7 @@ pub fn is_public_repo(repo_root: &Path) -> bool {
 /// Tests for the mechanical leak scan.
 mod tests {
     use super::*;
+    use tempfile::tempdir;
 
     /// Private RFC1918 addresses are flagged in all three ranges.
     #[test]
@@ -257,5 +294,14 @@ mod tests {
     fn guard_refuses_leaking_content() {
         let err = guard_no_leaks("host 10.0.0.1").unwrap_err();
         assert!(err.to_string().contains("refusing to emit"));
+    }
+
+    /// Visibility detection fails safe. A directory that is not a repository at
+    /// all cannot be shown to be private, so it must be screened as if public.
+    /// The gate erring toward more screening is the safe direction.
+    #[test]
+    fn unknown_visibility_is_treated_as_public() {
+        let dir = tempdir().unwrap();
+        assert!(is_public_repo(dir.path()));
     }
 }

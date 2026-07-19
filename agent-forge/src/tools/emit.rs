@@ -40,15 +40,19 @@ pub fn review(db: &Database, input: ReviewInput) -> ToolResult {
     let record = load_spec_record(db, &spec_id)?;
     let trust = derive_trust(&record.verifications);
 
+    // Both variants state the trust label verbatim and then add guidance the
+    // label does not carry. Restating the label's own content in the surrounding
+    // sentence, as an earlier version did, made the first thing a reviewer reads
+    // say one fact three times.
     let banner = match trust {
         Trust::Unverified => format!(
-            "> **Review priority:** no verification run for this spec has passed ({}). \
-             Every decision below is unproved; read them closely.\n\n",
+            "> **Review priority:** {}. No verification run for this spec has \
+             passed, so every decision below is unproved. Read them closely.\n\n",
             trust.label()
         ),
         Trust::SpecVerified => format!(
-            "> **Review priority:** a verification run for this spec passed ({}). \
-             Individual decisions were not separately proved.\n\n",
+            "> **Review priority:** {}. The criteria were exercised, so read the \
+             decisions below for judgment rather than for correctness.\n\n",
             trust.label()
         ),
     };
