@@ -54,6 +54,8 @@ enum Commands {
     ListSpecs,
     GetSpec,
     Stats,
+    /// Assemble the review record for a spec. Present only in `fluency` builds.
+    #[cfg(feature = "fluency")]
     Review,
     RepoMap,
     SearchCode,
@@ -206,6 +208,7 @@ fn main() {
         Commands::Stats => read_input(&cli.input)
             .map_err(|e| e.to_string())
             .and_then(|input| tools::stats::stats(&db, input).map_err(|e| e.to_string())),
+        #[cfg(feature = "fluency")]
         Commands::Review => read_input(&cli.input)
             .map_err(|e| e.to_string())
             .and_then(|input| tools::emit::review(&db, input).map_err(|e| e.to_string())),

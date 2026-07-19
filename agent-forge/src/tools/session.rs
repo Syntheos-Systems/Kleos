@@ -4,16 +4,10 @@
 //! skill); `session_recall` retrieves past learnings by keyword search.
 
 use crate::db::Database;
-use crate::emit::gatekeeper::{guard_no_leaks, is_public_repo};
-use crate::emit::model::load_spec_record;
-use crate::emit::paths::{slice_path, slices_dir, slugify};
-use crate::emit::render::{render_slice, SliceContent};
-use crate::emit::trust::derive_trust;
 use crate::json_io::Output;
 use crate::tools::{ToolError, ToolResult};
 use chrono::Utc;
 use serde::Deserialize;
-use std::path::PathBuf;
 use std::process::Command;
 use uuid::Uuid;
 
@@ -55,8 +49,11 @@ pub struct CheckpointInput {
 /// numbering, so it cannot consume a number a later slice needs, and the
 /// checkpoint remains rollback-able by name exactly like a snapshot-only one.
 pub fn checkpoint(db: &Database, input: CheckpointInput) -> ToolResult {
+    // Cloned rather than moved out: `input` is passed whole to `emit_slice`
+    // below, so it has to stay intact.
     let name = input
         .name
+        .clone()
         .ok_or_else(|| ToolError::MissingField("name".into()))?;
 
     let id = format!("ckpt_{}", &Uuid::new_v4().to_string()[..8]);
@@ -93,13 +90,34 @@ pub fn checkpoint(db: &Database, input: CheckpointInput) -> ToolResult {
         ));
     }
 
+    emit_slice(db, &input, &id, &name, &spec_id)
+}
+
+/// Render this checkpoint's slice document, refuse it if the leak scan trips,
+/// write it beside the code, and record the slice number on the checkpoint row.
+/// Compiled only under the `fluency` feature.
+#[cfg(feature = "fluency")]
+fn emit_slice(
+    db: &Database,
+    input: &CheckpointInput,
+    id: &str,
+    name: &str,
+    spec_id: &str,
+) -> ToolResult {
+    use crate::emit::gatekeeper::{guard_no_leaks, is_public_repo};
+    use crate::emit::model::load_spec_record;
+    use crate::emit::paths::{slice_path, slices_dir, slugify};
+    use crate::emit::render::{render_slice, SliceContent};
+    use crate::emit::trust::derive_trust;
+    use std::path::PathBuf;
+
     let repo_root: PathBuf = input
         .repo_root
         .clone()
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("."));
 
-    let record = load_spec_record(db, &spec_id)?;
+    let record = load_spec_record(db, spec_id)?;
     let trust = derive_trust(&record.verifications);
     let spec_slug = slugify(&record.task_description);
 
@@ -114,7 +132,7 @@ pub fn checkpoint(db: &Database, input: CheckpointInput) -> ToolResult {
         .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
     let content = SliceContent {
-        intent: input.intent.clone().unwrap_or_else(|| name.clone()),
+        intent: input.intent.clone().unwrap_or_else(|| name.to_string()),
         components: input.components.clone().unwrap_or_default(),
         conditions: input.conditions.clone().unwrap_or_default(),
     };
@@ -140,7 +158,7 @@ pub fn checkpoint(db: &Database, input: CheckpointInput) -> ToolResult {
         .map_err(|e| ToolError::DatabaseError(e.to_string()))?;
 
     let mut output = Output::ok_with_id(
-        id,
+        id.to_string(),
         format!(
             "Checkpoint '{}' created, slice {:03} emitted",
             name, next_index
@@ -150,6 +168,37 @@ pub fn checkpoint(db: &Database, input: CheckpointInput) -> ToolResult {
         "slice_path": path.to_string_lossy(),
         "slice_index": next_index,
         "requires_screening": is_public_repo(&repo_root),
+    }));
+    Ok(output)
+}
+
+/// Stand-in for `emit_slice` in builds without the `fluency` feature.
+///
+/// The snapshot has already been committed by the time this runs, so refusing
+/// with an error would misreport what happened. Reporting success while
+/// silently discarding the request would be worse still: the caller asked for a
+/// document and would have no way to learn it was never written. This reports
+/// the snapshot honestly and names the feature that would satisfy the request.
+#[cfg(not(feature = "fluency"))]
+fn emit_slice(
+    _db: &Database,
+    _input: &CheckpointInput,
+    id: &str,
+    name: &str,
+    _spec_id: &str,
+) -> ToolResult {
+    let mut output = Output::ok_with_id(
+        id.to_string(),
+        format!(
+            "Checkpoint '{}' created. Slice emission was requested but this build \
+             does not include the emission layer; rebuild agent-forge with \
+             `--features fluency` to write slice documents.",
+            name
+        ),
+    );
+    output.data = Some(serde_json::json!({
+        "emitted": false,
+        "reason": "the fluency feature is not enabled in this build",
     }));
     Ok(output)
 }
@@ -393,6 +442,7 @@ mod tests {
     }
 
     /// A checkpoint carrying a spec_id writes a numbered slice document.
+    #[cfg(feature = "fluency")]
     #[test]
     fn checkpoint_with_spec_id_writes_a_slice() {
         let dir = tempdir().unwrap();
@@ -411,6 +461,7 @@ mod tests {
     }
 
     /// Slice indices increment per spec across successive checkpoints.
+    #[cfg(feature = "fluency")]
     #[test]
     fn slice_indices_increment() {
         let dir = tempdir().unwrap();
@@ -424,6 +475,7 @@ mod tests {
     /// The error message is asserted, not merely the fact of an error, so this
     /// test pins the leak guard specifically rather than passing on any failure
     /// that happens to occur earlier in the function.
+    #[cfg(feature = "fluency")]
     #[test]
     fn leaking_content_is_refused() {
         let dir = tempdir().unwrap();
@@ -434,6 +486,22 @@ mod tests {
         let err = checkpoint(&db, input).err().unwrap();
         assert!(err.to_string().contains("refusing to emit"));
         assert!(!dir.path().join("docs/agent-forge/work").exists());
+    }
+
+    /// Without the `fluency` feature a checkpoint that requests emission still
+    /// snapshots, writes no files, and says so rather than reporting a silent
+    /// success that would leave the caller believing a document exists.
+    #[cfg(not(feature = "fluency"))]
+    #[test]
+    fn checkpoint_reports_emission_not_compiled_in() {
+        let dir = tempdir().unwrap();
+        let db = db_with_spec(dir.path());
+        let out = checkpoint(&db, emitting_input(dir.path(), "first")).unwrap();
+
+        assert!(out.success);
+        assert!(out.message.contains("--features fluency"));
+        assert_eq!(out.data.unwrap()["emitted"], serde_json::json!(false));
+        assert!(!dir.path().join("docs/agent-forge").exists());
     }
 
     /// `emit: false` suppresses the document while still taking the snapshot.
