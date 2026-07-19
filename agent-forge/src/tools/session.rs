@@ -41,8 +41,19 @@ pub struct CheckpointInput {
     pub repo_root: Option<String>,
 }
 
-/// Record the current `git rev-parse HEAD` value under `name` so the agent
-/// can return to this point if subsequent edits go wrong.
+/// Record the current `git rev-parse HEAD` value under `name` so the agent can
+/// return to this point if subsequent edits go wrong, and -- when a `spec_id` is
+/// supplied -- render this slice of the work into a committed document.
+///
+/// The snapshot is committed to the database BEFORE the emission steps run, and
+/// that ordering is deliberate. The snapshot is the rollback safety net, so it
+/// must survive a failure to render or screen the document; losing the ability
+/// to roll back because a leak scan refused some prose would be the worse
+/// outcome by far. A caller therefore cannot read `Err` as "nothing happened":
+/// the checkpoint row may exist with `spec_id` and `slice_index` left NULL. That
+/// state is benign. A NULL `slice_index` is ignored by the `MAX` used for slice
+/// numbering, so it cannot consume a number a later slice needs, and the
+/// checkpoint remains rollback-able by name exactly like a snapshot-only one.
 pub fn checkpoint(db: &Database, input: CheckpointInput) -> ToolResult {
     let name = input
         .name
@@ -410,6 +421,9 @@ mod tests {
     }
 
     /// Content that trips the leak scan is refused and no file is written.
+    /// The error message is asserted, not merely the fact of an error, so this
+    /// test pins the leak guard specifically rather than passing on any failure
+    /// that happens to occur earlier in the function.
     #[test]
     fn leaking_content_is_refused() {
         let dir = tempdir().unwrap();
@@ -417,8 +431,34 @@ mod tests {
         let mut input = emitting_input(dir.path(), "leaky");
         input.components = Some(vec!["Talks to 10.0.0.1 directly".into()]);
 
-        let result = checkpoint(&db, input);
-        assert!(result.is_err());
+        let err = checkpoint(&db, input).err().unwrap();
+        assert!(err.to_string().contains("refusing to emit"));
         assert!(!dir.path().join("docs/agent-forge/work").exists());
+    }
+
+    /// `emit: false` suppresses the document while still taking the snapshot.
+    /// The checkpoint row keeps a NULL `slice_index`, so a suppressed checkpoint
+    /// cannot consume a slice number that a later real slice would need.
+    #[test]
+    fn emit_false_suppresses_the_document() {
+        let dir = tempdir().unwrap();
+        let db = db_with_spec(dir.path());
+        let mut input = emitting_input(dir.path(), "suppressed");
+        input.emit = Some(false);
+
+        let out = checkpoint(&db, input).unwrap();
+        assert!(out.success);
+        assert!(out.data.is_none());
+        assert!(!dir.path().join("docs/agent-forge/work").exists());
+
+        let indexed: i64 = db
+            .conn()
+            .query_row(
+                "SELECT COUNT(*) FROM checkpoints WHERE slice_index IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(indexed, 0);
     }
 }
