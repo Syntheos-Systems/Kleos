@@ -36,6 +36,15 @@ fn trim_token(token: &str) -> &str {
 /// Returns one human-readable finding per detection. An empty result means the
 /// mechanical checks passed; it does not mean the content is safe, which is why
 /// callers still require a semantic pass on public repositories.
+///
+/// KNOWN FALSE POSITIVE, accepted deliberately: a four-part numeric run whose
+/// first segment is 10 is reported as a private address even when it is really
+/// a version or a section number, so "assembly version 10.20.30.1" and "see
+/// Section 10.5.0.1" both trip the gate. Distinguishing them mechanically would
+/// require guessing at surrounding prose, and this module is a reliable floor
+/// rather than a clever one. The failure is in the safe direction: emission is
+/// refused, the finding names the exact string, and an operator resolves it in
+/// a moment.
 pub fn scan_for_leaks(content: &str) -> Vec<String> {
     let mut findings = Vec::new();
 
@@ -78,17 +87,25 @@ pub fn scan_for_leaks(content: &str) -> Vec<String> {
                 // A bare mention such as "password: none recorded" is prose, not
                 // a credential. Require a value with some length and no spaces.
                 let candidate: String = value.chars().take_while(|c| !c.is_whitespace()).collect();
-                // Prose values such as "expired" or "revoked" are the wrong
-                // SHAPE for a secret. A generated credential is either long or
-                // mixes letters and digits, so requiring that keeps ordinary
-                // sentences about session tokens from tripping the gate. This
-                // module discusses tokens constantly; a gate that refuses its
-                // own documentation would be turned off, and a gate that is
-                // turned off protects nothing.
-                let has_digit = candidate.chars().any(|c| c.is_ascii_digit());
-                let has_alpha = candidate.chars().any(|c| c.is_ascii_alphabetic());
-                let looks_generated = candidate.len() >= 12 || (has_digit && has_alpha);
-                if candidate.len() >= 6 && looks_generated {
+                // `token` is the only marker that appears constantly in ordinary
+                // prose about sessions and auth, so it alone requires the value
+                // to LOOK generated -- long, or mixing letters and digits. A
+                // gate that refuses its own documentation gets switched off, and
+                // a gate that is switched off protects nothing.
+                //
+                // The other markers keep the plain length rule. Applying the
+                // shape check to them would clear `password=letmein` and
+                // `api_key=abcdefghijk`, and a short all-lowercase password is
+                // precisely the shape real leaks take. Suppressing prose noise
+                // must not cost detection of the weakest secrets.
+                let credential_shaped = if marker == "token" {
+                    let has_digit = candidate.chars().any(|c| c.is_ascii_digit());
+                    let has_alpha = candidate.chars().any(|c| c.is_ascii_alphabetic());
+                    candidate.len() >= 12 || (has_digit && has_alpha)
+                } else {
+                    true
+                };
+                if candidate.len() >= 6 && credential_shaped {
                     findings.push(format!("credential-shaped assignment: {}", marker));
                     break;
                 }
@@ -204,10 +221,29 @@ mod tests {
         assert!(scan_for_leaks("auth token: revoked by the server").is_empty());
     }
 
-    /// A marker inside a larger identifier is not a credential assignment.
+    /// A marker inside a larger identifier is not a credential assignment, even
+    /// when the value after it would otherwise pass the shape check.
+    ///
+    /// The first case is what makes this test worth having. An earlier version
+    /// used only prose values, which the shape check alone already rejected, so
+    /// deleting the word-boundary guard entirely would not have failed a single
+    /// test. `mytoken=abc123def456` passes the shape check, so only the boundary
+    /// guard can suppress it -- which means this assertion actually pins that
+    /// guard rather than shadowing it.
     #[test]
     fn ignores_marker_inside_an_identifier() {
+        assert!(scan_for_leaks("mytoken=abc123def456").is_empty());
         assert!(scan_for_leaks("fn trim_token: helper for the scan").is_empty());
+    }
+
+    /// A short all-alphabetic secret is still a secret. Only `token` gets the
+    /// generated-shape check, because only `token` is common in prose; applying
+    /// that check to every marker would clear a weak password, which is the
+    /// shape real leaks most often take.
+    #[test]
+    fn flags_short_alphabetic_secrets() {
+        assert!(!scan_for_leaks("password=letmein").is_empty());
+        assert!(!scan_for_leaks("api_key=abcdefghijk").is_empty());
     }
 
     /// The shared guard passes clean content through.
