@@ -4,6 +4,7 @@
 pub mod approaches;
 pub mod ast;
 pub mod comments;
+pub mod emit;
 pub mod hypothesis;
 pub mod session;
 pub mod skills;

@@ -54,6 +54,7 @@ enum Commands {
     ListSpecs,
     GetSpec,
     Stats,
+    Review,
     RepoMap,
     SearchCode,
     SkillSearch,
@@ -205,6 +206,9 @@ fn main() {
         Commands::Stats => read_input(&cli.input)
             .map_err(|e| e.to_string())
             .and_then(|input| tools::stats::stats(&db, input).map_err(|e| e.to_string())),
+        Commands::Review => read_input(&cli.input)
+            .map_err(|e| e.to_string())
+            .and_then(|input| tools::emit::review(&db, input).map_err(|e| e.to_string())),
     };
 
     let output = match result {
